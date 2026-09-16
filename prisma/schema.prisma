@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+model GuildSettings {
+  guildId String @id
+  data Json
+  revision Int @default(0)
+  updatedAt DateTime @updatedAt
+}
+model Ticket {
+  id String @id @default(uuid())
+  number Int @unique @default(autoincrement())
+  guildId String
+  ownerId String
+  categoryKey String
+  roleId String
+  channelId String? @unique
+  welcomeMessageId String?
+  subject String
+  description String
+  details Json
+  status String @default("CREATING")
+  claimId String?
+  priority String @default("normal")
+  name String?
+  parentId String?
+  operation String?
+  operationData Json?
+  lastFailureAt DateTime?
+  createdAt DateTime @default(now())
+  closedAt DateTime?
+  closedBy String?
+  closeReason String?
+  generation Int @default(0)
+  transcriptGeneration Int?
+  participants Participant[]
+  transcripts Transcript[]
+  audits AuditEvent[]
+  @@index([guildId, ownerId])
+  @@index([operation])
+}
+model Participant {
+  ticketId String
+  userId String
+  ticket Ticket @relation(fields:[ticketId],references:[id])
+  @@id([ticketId,userId])
+}
+model Transcript {
+  id String @id @default(uuid())
+  ticketId String
+  generation Int
+  part Int
+  html String
+  logChannelId String
+  messageId String?
+  ticket Ticket @relation(fields:[ticketId],references:[id])
+  @@unique([ticketId,generation,part])
+}
+model AuditEvent {
+  id String @id @default(uuid())
+  ticketId String
+  actorId String
+  action String
+  detail String?
+  createdAt DateTime @default(now())
+  ticket Ticket @relation(fields:[ticketId],references:[id])
+}
+model Confirmation {
+  id String @id @default(uuid())
+  ticketId String
+  userId String
+  action String
+  generation Int
+  reason String?
+  expiresAt DateTime
+}
+model Panel {
+  guildId String
+  kind String
+  channelId String
+  messageId String
+  @@id([guildId,kind])
+}

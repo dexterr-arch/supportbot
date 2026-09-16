@@ -1,0 +1,322 @@
+import { ChannelType, PermissionFlagsBits, type Guild, type TextChannel } from 'discord.js';
+import { Prisma, type Ticket } from '@prisma/client';
+import type { Database } from '../database/client.js';
+import { getSettings, categoryRole } from '../config/settings.js';
+import { overwrites, textChannel, validateRouting } from '../discord/permissions.js';
+import { ticketPanel } from '../discord/ui.js';
+import { archive, verifyArchive } from '../transcripts/service.js';
+import { channelName } from './policy.js';
+import { reserve, begin } from './repository.js';
+import { logger, safeError, UserError } from '../infrastructure/logger.js';
+export class TicketService {
+  private running = new Set<string>();
+  constructor(
+    readonly db: Database,
+    readonly guild: Guild,
+  ) {}
+  async open(
+    ownerId: string,
+    key: string,
+    subject: string,
+    description: string,
+    details: Record<string, string>,
+  ) {
+    const { settings: s } = await getSettings(this.db, this.guild.id);
+    await validateRouting(this.guild, s);
+    const category = s.categories.find((c) => c.key === key);
+    if (!category) throw new UserError('This category no longer exists. Refresh the panel.');
+    const t = await reserve(this.db, {
+      guildId: this.guild.id,
+      ownerId,
+      categoryKey: key,
+      roleId: categoryRole(s, category),
+      subject,
+      description,
+      details,
+      operation: 'create',
+      operationData: { actorId: ownerId },
+      parentId: category.parentId || s.ticketCategoryId,
+    });
+    await this.run(t.id);
+    return this.db.ticket.findUniqueOrThrow({ where: { id: t.id } });
+  }
+  async request(
+    t: Ticket,
+    action: string,
+    actorId: string,
+    data: Record<string, string> = {},
+    generation = t.generation,
+  ) {
+    try {
+      await begin(this.db, t, action, actorId, data, generation);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')
+        throw new UserError(
+          'The owner already has another active ticket. Close it before reopening this one.',
+        );
+      throw e;
+    }
+    await this.run(t.id);
+  }
+  async getChannel(t: Ticket) {
+    if (!t.channelId) throw new UserError('Ticket channel is not ready.');
+    return textChannel(this.guild, t.channelId);
+  }
+  async applyAccess(t: Ticket, channel: TextChannel, locked: boolean) {
+    const participants = await this.db.participant.findMany({ where: { ticketId: t.id } });
+    await channel.permissionOverwrites.set(
+      overwrites(
+        this.guild.id,
+        this.guild.client.user.id,
+        t.ownerId,
+        t.roleId,
+        participants.map((p) => p.userId),
+        locked,
+      ),
+      'Ticket access policy',
+    );
+  }
+  async refresh(id: string) {
+    const t = await this.db.ticket.findUniqueOrThrow({ where: { id } });
+    if (!t.channelId || !t.welcomeMessageId || t.status === 'DELETED') return;
+    const s = (await getSettings(this.db, this.guild.id)).settings;
+    const channel = await this.getChannel(t);
+    await channel.messages.edit(t.welcomeMessageId, ticketPanel(s, t));
+  }
+  private async finish(t: Ticket, actorId: string, status?: string) {
+    await this.db.$transaction([
+      this.db.ticket.update({
+        where: { id: t.id },
+        data: {
+          operation: null,
+          operationData: Prisma.DbNull,
+          lastFailureAt: null,
+          ...(status ? { status } : {}),
+        },
+      }),
+      this.db.auditEvent.create({
+        data: { ticketId: t.id, actorId, action: t.operation ?? 'unknown' },
+      }),
+    ]);
+    await this.refresh(t.id).catch((e) =>
+      logger.warn(
+        { ticketId: t.id, ...safeError(e) },
+        'Ticket display refresh failed; actions still check database state.',
+      ),
+    );
+  }
+  async run(id: string) {
+    if (this.running.has(id)) return;
+    this.running.add(id);
+    try {
+      let t = await this.db.ticket.findUniqueOrThrow({ where: { id } });
+      if (!t.operation) return;
+      const s = (await getSettings(this.db, this.guild.id)).settings;
+      const op = (t.operationData ?? {}) as Record<string, string>;
+      const actorId = op.actorId ?? this.guild.client.user.id;
+      if (t.operation === 'create') {
+        let channel: TextChannel;
+        if (t.channelId) channel = await this.getChannel(t);
+        else {
+          const all = await this.guild.channels.fetch();
+          const candidates = all.filter(
+            (c) => c?.type === ChannelType.GuildText && c.topic === 'support-ticket:' + t.id,
+          );
+          if (candidates.size > 1)
+            throw new Error('Multiple matching ticket channels need administrator review.');
+          const existing = candidates.first();
+          channel =
+            existing?.type === ChannelType.GuildText
+              ? existing
+              : await this.guild.channels.create({
+                  name: 'ticket-' + t.number + '-' + channelName(t.subject).slice(0, 40),
+                  type: ChannelType.GuildText,
+                  parent: t.parentId!,
+                  topic: 'support-ticket:' + t.id,
+                  permissionOverwrites: overwrites(
+                    this.guild.id,
+                    this.guild.client.user.id,
+                    t.ownerId,
+                    t.roleId,
+                    [],
+                    false,
+                  ),
+                  reason: 'Create support ticket #' + t.number,
+                });
+          t = await this.db.ticket.update({ where: { id }, data: { channelId: channel.id } });
+        }
+        if (!t.welcomeMessageId) {
+          // Search after ambiguous delivery before sending again. The channel is new and private.
+          const recent = await channel.messages.fetch({ limit: 100 });
+          const previous = recent.find(
+            (m) =>
+              m.author.id === this.guild.client.user.id &&
+              JSON.stringify(m.components).includes(t.id),
+          );
+          if (previous)
+            await this.db.ticket.update({ where: { id }, data: { welcomeMessageId: previous.id } });
+          else {
+            const payload = ticketPanel(s, { ...t, status: 'OPEN', operation: null }, true);
+            const sent = await channel.send({
+              ...payload,
+              allowedMentions: {
+                parse: [],
+                users: [t.ownerId],
+                roles: [t.roleId],
+                repliedUser: false,
+              },
+              nonce: String(t.number),
+              enforceNonce: true,
+            });
+            await this.db.ticket.update({ where: { id }, data: { welcomeMessageId: sent.id } });
+          }
+        }
+        await this.finish(t, actorId, 'OPEN');
+        return;
+      }
+      const channel = await this.getChannel(t).catch(async (e) => {
+        if (t.operation === 'delete' && t.channelId) {
+          const exists = await this.guild.channels.fetch(t.channelId);
+          if (!exists) return null;
+        }
+        throw e;
+      });
+      if (t.operation === 'close') {
+        if (!channel) throw new Error('Channel unavailable.');
+        await this.applyAccess(t, channel, true);
+        await archive(this.db, this.guild, channel, t, s, op.reason ?? '', actorId);
+        if (channel.parentId !== s.archiveCategoryId)
+          await channel.setParent(s.archiveCategoryId, { lockPermissions: false });
+        await this.applyAccess(t, channel, true);
+        await this.finish(t, actorId, 'CLOSED');
+      } else if (t.operation === 'delete') {
+        // Always recheck durable uploads; never delete after an upload failure.
+        await verifyArchive(this.db, this.guild, t);
+        if (channel) await channel.delete('Confirmed ticket deletion by ' + actorId);
+        await this.finish(t, actorId, 'DELETED');
+      } else if (t.operation === 'reopen') {
+        if (!channel) throw new Error('Channel unavailable.');
+        if (channel.parentId !== t.parentId)
+          await channel.setParent(t.parentId || s.ticketCategoryId, { lockPermissions: false });
+        await this.applyAccess(t, channel, false);
+        // Clear operation and advance generation in one transaction so recovery cannot increment twice.
+        await this.db.$transaction([
+          this.db.ticket.update({
+            where: { id },
+            data: {
+              status: 'OPEN',
+              operation: null,
+              operationData: Prisma.DbNull,
+              generation: { increment: 1 },
+              closedAt: null,
+              closedBy: null,
+              closeReason: null,
+              transcriptGeneration: null,
+              lastFailureAt: null,
+            },
+          }),
+          this.db.auditEvent.create({ data: { ticketId: id, actorId, action: 'reopen' } }),
+        ]);
+        await this.refresh(id);
+      } else {
+        if (!channel) throw new Error('Channel unavailable.');
+        switch (t.operation) {
+          case 'add': {
+            const target = await this.guild.members.fetch(op.member!);
+            if (target.user.bot) throw new UserError('Bot accounts cannot be ticket participants.');
+            const count = await this.db.participant.count({ where: { ticketId: id } });
+            if (
+              count >= 80 &&
+              !(await this.db.participant.findUnique({
+                where: { ticketId_userId: { ticketId: id, userId: target.id } },
+              }))
+            )
+              throw new UserError('This ticket has reached its participant limit.');
+            await this.db.participant.upsert({
+              where: { ticketId_userId: { ticketId: id, userId: target.id } },
+              create: { ticketId: id, userId: target.id },
+              update: {},
+            });
+            await this.applyAccess(t, channel, false);
+            break;
+          }
+          case 'remove':
+            await this.db.participant.deleteMany({ where: { ticketId: id, userId: op.member! } });
+            await this.applyAccess(t, channel, false);
+            break;
+          case 'rename':
+            await channel.setName(channelName(op.name!));
+            await this.db.ticket.update({ where: { id }, data: { name: channelName(op.name!) } });
+            break;
+          case 'escalate': {
+            const cat = s.categories.find((c) => c.key === 'management');
+            const parentId = cat?.parentId || s.ticketCategoryId;
+            t = await this.db.ticket.update({
+              where: { id },
+              data: {
+                roleId: s.managementRoleId,
+                categoryKey: cat?.key ?? 'management',
+                parentId,
+                claimId: null,
+              },
+            });
+            if (channel.parentId !== parentId)
+              await channel.setParent(parentId, { lockPermissions: false });
+            await this.applyAccess(t, channel, false);
+            break;
+          }
+          case 'move': {
+            const parent = await this.guild.channels.fetch(op.parent!);
+            if (
+              parent?.type !== ChannelType.GuildCategory ||
+              !parent
+                .permissionsFor(this.guild.members.me!)
+                ?.has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles])
+            )
+              throw new UserError('Choose a category the bot can manage.');
+            await channel.setParent(parent.id, { lockPermissions: false });
+            await this.db.ticket.update({ where: { id }, data: { parentId: parent.id } });
+            await this.applyAccess(t, channel, false);
+            break;
+          }
+          case 'priority':
+            if (!['low', 'normal', 'high', 'urgent'].includes(op.priority!))
+              throw new UserError('Invalid priority.');
+            await this.db.ticket.update({ where: { id }, data: { priority: op.priority } });
+            break;
+          default:
+            throw new Error('Unknown persisted operation.');
+        }
+        await this.finish(t, actorId);
+      }
+    } catch (e) {
+      await this.db.ticket
+        .updateMany({
+          where: { id, operation: { not: null } },
+          data: { lastFailureAt: new Date() },
+        })
+        .catch(() => undefined);
+      logger.error(
+        { ticketId: id, ...safeError(e) },
+        'Ticket operation paused; recovery will retry. Channel preserved.',
+      );
+      throw new UserError(
+        'The operation could not finish. The channel is preserved and recovery will retry. Ask an administrator to check /bot status, permissions, and logs.',
+      );
+    } finally {
+      this.running.delete(id);
+    }
+  }
+  async recover() {
+    const pending = await this.db.ticket.findMany({
+      where: { guildId: this.guild.id, operation: { not: null } },
+      orderBy: [{ lastFailureAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'asc' }],
+      take: 100,
+    });
+    for (const t of pending) await this.run(t.id).catch(() => undefined);
+    await this.db.confirmation.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  }
+  get activeOperations() {
+    return this.running.size;
+  }
+}
