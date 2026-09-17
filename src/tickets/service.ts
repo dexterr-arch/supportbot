@@ -118,6 +118,12 @@ export class TicketService {
     data: Record<string, string> = {},
     generation = t.generation,
   ) {
+    if (action === 'escalate' || action === 'priority')
+      throw new UserError('This control has been removed.');
+    if (action === 'reopen' && t.status === 'DELETED')
+      throw new UserError(
+        'This ticket was deleted after saving its transcript. Open a new ticket from the support panel.',
+      );
     if (action === 'reopen') {
       if (await this.reconcileMissing(t))
         throw new UserError(
@@ -270,10 +276,10 @@ export class TicketService {
         if (!channel) throw new Error('Channel unavailable.');
         await this.applyAccess(t, channel, true);
         await archive(this.db, this.guild, channel, t, s, op.reason ?? '', actorId);
-        if (channel.parentId !== s.archiveCategoryId)
-          await channel.setParent(s.archiveCategoryId, { lockPermissions: false });
-        await this.applyAccess(t, channel, true);
-        await this.finish(t, actorId, 'CLOSED');
+        const saved = await this.db.ticket.findUniqueOrThrow({ where: { id } });
+        await verifyArchive(this.db, this.guild, saved);
+        await channel.delete('Ticket closed; transcript verified. Requested by ' + actorId);
+        await this.finish(t, actorId, 'DELETED');
       } else if (t.operation === 'delete') {
         // Always recheck durable uploads; never delete after an upload failure.
         await verifyArchive(this.db, this.guild, t);
@@ -408,12 +414,16 @@ export class TicketService {
     });
     for (const ticket of tickets) {
       if (this.running.has(ticket.id)) continue;
-      await this.reconcileMissing(ticket).catch((error) =>
-        logger.warn(
-          { ticketId: ticket.id, ...safeError(error) },
-          'Could not verify ticket channel; record retained.',
-        ),
-      );
+      await this.reconcileMissing(ticket)
+        .then(async (missing) => {
+          if (!missing) await this.refresh(ticket.id);
+        })
+        .catch((error) =>
+          logger.warn(
+            { ticketId: ticket.id, ...safeError(error) },
+            'Could not verify ticket channel; record retained.',
+          ),
+        );
     }
   }
   get activeOperations() {

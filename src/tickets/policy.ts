@@ -36,7 +36,7 @@ export function allowed(
 export const transitions: Record<string, readonly string[]> = {
   CREATING: ['OPEN'],
   OPEN: ['CLOSING'],
-  CLOSING: ['CLOSED'],
+  CLOSING: ['CLOSED', 'DELETED'],
   CLOSED: ['REOPENING', 'DELETING'],
   REOPENING: ['OPEN'],
   DELETING: ['DELETED'],
