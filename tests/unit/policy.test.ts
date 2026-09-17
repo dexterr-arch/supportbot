@@ -48,6 +48,12 @@ describe('ticket authorization', () => {
   });
 });
 describe('channel access', () => {
+  it('allows role notification only through the bot private-channel overwrite', () => {
+    const rows = overwrites('guild', 'bot', 'owner', 'support', [], false);
+    for (const row of rows)
+      expect(new PermissionsBitField(row.allow).has(P.MentionEveryone)).toBe(row.id === 'bot');
+    expect(new PermissionsBitField(BigInt(invitePermissions)).has(P.MentionEveryone)).toBe(false);
+  });
   it('denies everyone and only grants the intended parties', () => {
     const result = overwrites('guild', 'bot', 'owner', 'support', ['guest', 'owner'], false);
     expect(result.map((o) => o.id)).toEqual(['guild', 'bot', 'support', 'owner', 'guest']);
