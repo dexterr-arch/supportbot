@@ -315,9 +315,7 @@ export class Router {
         'add',
         'remove',
         'rename',
-        'escalate',
         'move',
-        'priority',
         'transcript',
       ].includes(action)
     )
@@ -333,8 +331,8 @@ export class Router {
             fields: [
               { name: 'Owner', value: '<@' + t.ownerId + '>' },
               {
-                name: 'Category / status / priority',
-                value: t.categoryKey + ' / ' + t.status + ' / ' + t.priority,
+                name: 'Category / status',
+                value: t.categoryKey + ' / ' + t.status,
               },
               { name: 'Claimed', value: t.claimId ? '<@' + t.claimId + '>' : 'Unclaimed' },
               { name: 'Opened', value: t.createdAt.toISOString() },
@@ -430,7 +428,7 @@ export class Router {
         content:
           action === 'delete'
             ? 'Permanently delete this channel? Its transcript must still exist in the private log. This confirmation expires in two minutes.'
-            : 'Close this ticket, create its transcript, and lock the channel? This confirmation expires in two minutes.',
+            : 'Save the transcript to the private staff log and permanently delete this ticket channel? You cannot reopen it. If saving fails, the channel is kept. This confirmation expires in two minutes.',
         components: [confirmation(pending.id, action)],
         allowedMentions: noMentions,
       });
