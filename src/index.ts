@@ -7,6 +7,7 @@ import { logger, safeError } from './infrastructure/logger.js';
 import { healthServer } from './infrastructure/health.js';
 import { TicketService } from './tickets/service.js';
 import { Router } from './discord/router.js';
+import { publishPanels } from './discord/settings-ui.js';
 async function main() {
   const env = loadEnv();
   const db = database(env.DATABASE_URL);
@@ -112,9 +113,14 @@ async function main() {
             recovering = false;
           }
         };
-        const initial = recovery().catch((e) =>
-          logger.error(safeError(e), 'Initial recovery failed.'),
-        );
+        const initial = service
+          .reconcileActiveChannels()
+          .then(recovery)
+          .then(async () => {
+            if (await db.panel.count({ where: { guildId: guild.id } }))
+              await publishPanels(db, guild);
+          })
+          .catch((e) => logger.error(safeError(e), 'Initial recovery failed.'));
         pending.add(initial);
         void initial.finally(() => pending.delete(initial));
         timer = setInterval(() => {
