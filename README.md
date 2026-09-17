@@ -1,5 +1,7 @@
 # Orange Support Ticket Bot
 
+**Support-only edition:** this update publishes one Contact panel with Support and Management. It removes the tracked Order Info panel when `/setup panels` runs. See [SUPPORT-ONLY-UPDATE.md](SUPPORT-ONLY-UPDATE.md) for upgrading an existing Railway deployment. Legacy commerce settings remain compatible with existing databases but are hidden from the interface.
+
 A customizable Discord support bot with orange Components V2 panels, private ticket channels, PostgreSQL persistence, HTML transcripts, and restart-safe controls. Branding and placeholder artwork are independent of the supplied design reference.
 
 **Start here:** complete the Discord setup below, put secrets in your private environment, start the bot, run `/setup settings`, then `/setup panels`.
@@ -56,7 +58,7 @@ Create:
 - A Support role and a Management role. These must be ordinary roles without Administrator.
 - An **Open Tickets** category and a **Closed Tickets** category.
 - A private **ticket-logs** standard text channel.
-- A public **support-desk** standard text channel for both panels. Optionally use a separate contact channel.
+- A public **support-desk** standard text channel for the Contact panel.
 
 For ticket-logs, deny View Channel to @everyone. Allow only configured staff roles, the bot, and administrators. Remove unrelated role/member grants. The bot validates that this channel is private before uploading transcripts.
 
@@ -109,51 +111,33 @@ To stop local testing: `docker compose down`. **Do not use `down -v` unless you 
 
 Only server administrators can use `/setup settings` and `/setup panels`. There is a second runtime authorization check in addition to slash-command visibility.
 
-Run `/setup settings`, choose a section, choose a field, and submit its private modal.
+Run **/setup settings** to open a private setup dashboard. It lists the destinations you still need to choose. No database editing or JSON is needed.
 
-| Section     | Settings                                                                                  |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| identity    | Brand name, hex accent color, cooldown seconds                                            |
-| routing     | Support/management roles, open/archive categories, transcript log, panel/contact channels |
-| images      | Order banner, contact banner, footer image URLs                                           |
-| information | Terms, Pricing, FAQ                                                                       |
-| panels      | Titles, explanatory paragraphs, dropdown placeholders, welcome/privacy wording            |
-| controls    | Button labels and intake field labels                                                     |
-| categories  | Create, edit, or remove a ticket category using small JSON objects                        |
+| Section                     | What it does                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1. Channels & staff roles   | Choose team roles, the public panel channel, open/closed ticket folders and private transcript log using Discord pickers. |
+| 2. Support & Management     | Edit either option's name, description and emoji. Optional staff-role and ticket-folder pickers override the defaults.    |
+| 3. Name & appearance        | Set the brand name, accent color and ticket-action cooldown.                                                              |
+| 4. Banner & footer images   | Set public HTTPS image URLs, or leave blank to hide images.                                                               |
+| 5. Panel & welcome messages | Write the public instructions, ticket welcome and privacy note.                                                           |
+| 6. Button & form wording    | Advanced customization of displayed labels.                                                                               |
 
-Configure the support and management role IDs before the private log channel. Then set open/archive categories, transcript log, and panel channel. A blank contact channel uses the panel channel. Leave optional image URLs empty to disable images. URLs must use HTTPS.
+Start with Channels & staff roles. Choose the Support and Management roles first, then the open-ticket and closed-ticket Discord categories, the staff-only log, and the public panel text channel. Human staff roles must not have Administrator. The private log must deny access to unrelated roles and members.
 
-Default image URLs point to generic orange placeholder images. Replace them with your own public PNG/JPEG/WebP artwork URLs. They contain no copied logo or artwork. A banner around 1200 × 320 and a footer around 1200 × 64 suit the layout; Discord decides final size and cropping.
+Each editor explains its purpose. After saving, use **Setup home** to continue. Click **Post / refresh panel** when ready (or run **/setup panels**). This publishes a single Contact panel with Support and Management and retires the old tracked Order Info message. Repeated use updates the recorded message. Existing configured branding and images are preserved.
 
-Category JSON example:
+Category editors contain five fields: displayed name, description, optional emoji, optional staff-role override and optional ticket-folder override. Leave overrides empty to use the main settings. Category keys are managed internally; both types ask only for a subject and description.
 
-```json
-{
-  "key": "order",
-  "label": "Order",
-  "description": "Discuss a service, budget, and deadline",
-  "emoji": "🛒",
-  "roleId": "",
-  "parentId": "",
-  "order": true
-}
-```
-
-Blank `roleId` uses Support, except the key `management`, which uses Management. Blank `parentId` uses the default open-ticket category. Set `order: true` to request service, budget, and deadline. Keys must be unique, lowercase, and no more than 20 characters. Up to 10 categories are supported. Submit `{"delete":true}` in an existing category editor to remove it; at least one category must remain.
-
-Terms, Pricing, and FAQ accept up to 3,500 characters each. Field limits are validated. Visible ticket excerpts and long button labels are shortened to keep Discord payloads safe; `/ticket info` and the archived transcript retain the full intake. Ticket subjects allow 120 characters, descriptions 1,800, services 200, and budget/deadline 100.
-
-After changing public wording or routing, run **`/setup panels`** to publish/refresh both panels. Re-running edits recorded panel messages rather than posting another pair. Moving the panel channel retires the old messages when accessible. Existing tickets keep their recorded category role and channel destination until explicitly moved/escalated.
+Images are optional. Use a public HTTPS image URL. Discord controls the displayed size and cropping. A banner around 1200 × 320 and footer around 1200 × 64 are suitable starting points.
 
 ## 5. Use tickets
 
-Members choose Support, Order, or Management in the Contact panel and submit the modal. One active ticket per member per server is enforced by a PostgreSQL unique index, including tickets being created/closed/reopened.
+Members choose Support or Management in the Contact panel and submit the modal. This opens a NEW request. Staff use Reopen inside a closed ticket to resume the SAME request. Closed tickets do not block new requests. A deleted channel cannot be reopened; open a new ticket instead. One active ticket per member per server is enforced by a PostgreSQL unique index, including tickets being created/closed/reopened.
 
 A ticket grants channel access to its owner, its category role, the bot, administrators, and explicitly added members. Added members can converse but do not receive staff management powers.
 
 | Command/control                                     | Who can use it                                                  |
 | --------------------------------------------------- | --------------------------------------------------------------- |
-| Order Info dropdown                                 | Any member who can see the panel; replies privately             |
 | `/ticket info`                                      | Owner, participants, category staff, management, administrators |
 | Close button / `/ticket close [reason]`             | Owner or authorized staff; requires confirmation                |
 | Claim / Unclaim                                     | Category staff; only claimant or management/admin can unclaim   |
@@ -171,6 +155,8 @@ Use ticket commands **inside that ticket's channel**. Add/Remove buttons ask for
 On closure, the bot freezes conversation, snapshots available messages, stores/upload transcripts, posts a summary, moves the channel to the archive category, and finalizes CLOSED state. Closed channels remain readable by authorized participants. Administrators bypass locks. Reopening starts a new transcript generation, so an old archive cannot authorize deletion of a later conversation.
 
 If transcript generation or upload fails, the channel stays preserved in CLOSING. Recovery retries every 30 seconds and after restarts. Correct the reported configuration/permission issue; do not manually delete the channel. Permanent deletion is blocked unless all current-cycle transcript attachments can still be verified in the private log.
+
+If a channel is removed outside the bot, startup and new-ticket checks verify its existence with Discord. Only a confirmed missing channel releases the stale active-ticket block, preserving the database record, audit and any existing transcripts. Permission failures and network errors retain the record. A ticket still finishing its transcript remains blocked until closure completes.
 
 ## 6. Develop without Docker
 
