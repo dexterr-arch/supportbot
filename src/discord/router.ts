@@ -26,6 +26,7 @@ import {
   saveSetting,
   publishPanels,
   privateReply,
+  setupButtons,
 } from './settings-ui.js';
 import { collect } from '../transcripts/service.js';
 import { renderParts } from '../transcripts/html.js';
@@ -44,9 +45,12 @@ export class Router {
       const { settings: s } = await getSettings(this.db, i.guildId);
       const now = Date.now();
       const key = i.user.id;
-      if ((this.cooldowns.get(key) ?? 0) > now)
+      const setupInteraction =
+        (i.isChatInputCommand() && i.commandName === 'setup') ||
+        ('customId' in i && /^(v1:settings:|v1:config:)/.test(i.customId));
+      if (!setupInteraction && (this.cooldowns.get(key) ?? 0) > now)
         throw new UserError('Please wait a few seconds before trying again.');
-      this.cooldowns.set(key, now + s.cooldownSeconds * 1000);
+      if (!setupInteraction) this.cooldowns.set(key, now + s.cooldownSeconds * 1000);
       if (this.cooldowns.size > 5000)
         for (const [id, expiry] of this.cooldowns) if (expiry < now) this.cooldowns.delete(id);
       const member = await this.service.guild.members.fetch(i.user.id);
@@ -59,7 +63,7 @@ export class Router {
         if (i.commandName === 'setup') {
           this.admin(actor);
           if (i.options.getSubcommand() === 'settings') {
-            await i.reply({ ...settingsMenu(), flags: MessageFlags.Ephemeral });
+            await i.reply({ ...settingsMenu(s), flags: MessageFlags.Ephemeral });
             return;
           }
           await i.deferReply({ flags: MessageFlags.Ephemeral });
@@ -70,7 +74,7 @@ export class Router {
           } finally {
             this.publishing = false;
           }
-          await privateReply(i, 'Both public panels are ready.');
+          await privateReply(i, 'The Support and Management panel is ready.');
           return;
         }
         if (i.commandName === 'bot') {
@@ -108,37 +112,13 @@ export class Router {
         }
         throw new UserError('Unknown command. Register this version’s commands.');
       }
-      if (i.isStringSelectMenu() && i.customId === 'v1:panel:order') {
-        const field = i.values[0];
-        if (!['terms', 'pricing', 'faq'].includes(field ?? ''))
-          throw new UserError('Unknown information option.');
-        await i.reply({
-          embeds: [
-            {
-              description: s[field as 'terms' | 'pricing' | 'faq'],
-              color: parseInt(s.accentColor.slice(1), 16),
-            },
-          ],
-          flags: MessageFlags.Ephemeral,
-          allowedMentions: noMentions,
-        });
-        return;
-      }
+      if (i.isStringSelectMenu() && i.customId === 'v1:panel:order')
+        throw new UserError('Ordering is disabled. Use the Support or Management ticket menu.');
       if (i.isStringSelectMenu() && i.customId === 'v1:panel:contact') {
         const c = s.categories.find((c) => c.key === i.values[0]);
         if (!c) throw new UserError('This category is no longer available.');
-        const active = await this.db.ticket.findFirst({
-          where: {
-            guildId: i.guildId,
-            ownerId: i.user.id,
-            status: { in: ['CREATING', 'OPEN', 'CLOSING', 'REOPENING'] },
-          },
-        });
-        if (active)
-          throw new UserError(
-            'You already have an active ticket' +
-              (active.channelId ? ': <#' + active.channelId + '>' : '. Creation is in progress.'),
-          );
+        // Duplicate/channel checks run after modal submission, when the reply
+        // can be deferred safely while Discord verifies the old channel.
         await i.showModal(
           modal('v1:open:' + c.key, 'Open ' + c.label, [
             { id: 'subject', label: s.copy.subject, max: 120 },
@@ -177,10 +157,34 @@ export class Router {
         return;
       }
       if (
-        (i.isStringSelectMenu() || i.isModalSubmit()) &&
+        (i.isStringSelectMenu() || i.isModalSubmit() || i.isButton()) &&
         /^(v1:settings:|v1:config:)/.test(i.customId)
       ) {
         this.admin(actor);
+        if (i.isButton()) {
+          if (i.customId === 'v1:settings:home') {
+            await i.update(settingsMenu(s));
+            return;
+          }
+          if (i.customId === 'v1:settings:publish') {
+            await i.deferReply({ flags: MessageFlags.Ephemeral });
+            if (this.publishing) throw new UserError('The panel is already being refreshed.');
+            this.publishing = true;
+            try {
+              await publishPanels(this.db, this.service.guild);
+            } finally {
+              this.publishing = false;
+            }
+            await i.editReply({
+              content:
+                '✅ Your Support and Management panel is ready in <#' + s.panelChannelId + '>.',
+              components: [setupButtons()],
+              allowedMentions: noMentions,
+            });
+            return;
+          }
+          throw new UserError('Open /setup settings to get the current setup menu.');
+        }
         if (i.isStringSelectMenu() && i.customId === 'v1:settings:group') {
           await i.update(await fieldsMenu(this.db, i.guildId, i.values[0]!));
           return;
@@ -193,10 +197,12 @@ export class Router {
           const pieces = i.customId.split(':');
           await i.deferReply({ flags: MessageFlags.Ephemeral });
           await saveSetting(this.db, i, Number(pieces[2]), pieces[3]!);
-          await privateReply(
-            i,
-            'Setting saved. Use /setup settings for more changes, then /setup panels to refresh the panels.',
-          );
+          await i.editReply({
+            content:
+              '✅ Saved. Choose **Setup home** to continue, or **Post / refresh panel** to update what members see.',
+            components: [setupButtons()],
+            allowedMentions: noMentions,
+          });
           return;
         }
       }

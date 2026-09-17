@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { defaults, settingsSchema } from '../../src/config/settings.js';
+import { defaults, settingsSchema, supportOnlySettings } from '../../src/config/settings.js';
 import { envSchema } from '../../src/config/env.js';
 describe('configuration validation', () => {
+  it('upgrades old settings to support and management while preserving routing and branding', () => {
+    const original = settingsSchema.parse(defaults);
+    original.panelChannelId = '1549726256826945656';
+    original.categories[0]!.label = 'Basic Support';
+    original.categories.push({
+      ...original.categories[0]!,
+      key: 'order',
+      label: 'Order',
+      order: true,
+    });
+    const result = supportOnlySettings(original);
+    expect(result.categories.map((c) => c.key)).toEqual(['support', 'management']);
+    expect(result.categories[0]!.label).toBe('Basic Support');
+    expect(result.panelChannelId).toBe(original.panelChannelId);
+    expect(result.categories.every((c) => !c.order)).toBe(true);
+    expect(original.categories).toHaveLength(3);
+  });
   it('accepts editable placeholders', () =>
     expect(settingsSchema.safeParse(defaults).success).toBe(true));
   it.each([

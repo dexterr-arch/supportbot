@@ -14,6 +14,66 @@ export class TicketService {
     readonly db: Database,
     readonly guild: Guild,
   ) {}
+  // Only a confirmed missing channel releases the owner's slot. Permission and
+  // network failures must never be mistaken for channel deletion.
+  async reconcileMissing(t: Ticket): Promise<boolean> {
+    if (!t.channelId || t.status === 'DELETED') return false;
+    let channel;
+    try {
+      channel = await this.guild.channels.fetch(t.channelId, { force: true });
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 10003))
+        throw error;
+      channel = null;
+    }
+    if (channel) return false;
+    const changed = await this.db.$transaction(async (tx) => {
+      const result = await tx.ticket.updateMany({
+        where: { id: t.id, status: t.status, operation: t.operation, generation: t.generation },
+        data: {
+          status: 'DELETED',
+          operation: null,
+          operationData: Prisma.DbNull,
+          lastFailureAt: null,
+        },
+      });
+      if (result.count)
+        await tx.auditEvent.create({
+          data: {
+            ticketId: t.id,
+            actorId: this.guild.client.user.id,
+            action: 'channel_missing',
+            detail:
+              'Discord confirmed the channel was removed. Stored history preserved; no transcript completion assumed.',
+          },
+        });
+      return result.count > 0;
+    });
+    if (changed)
+      logger.warn(
+        { ticketId: t.id },
+        'Removed stale active-ticket block: channel no longer exists.',
+      );
+    return changed;
+  }
+  async activeTicket(ownerId: string) {
+    const active = await this.db.ticket.findFirst({
+      where: {
+        guildId: this.guild.id,
+        ownerId,
+        status: { in: ['CREATING', 'OPEN', 'CLOSING', 'REOPENING'] },
+      },
+    });
+    if (!active) return null;
+    if (!this.running.has(active.id)) await this.reconcileMissing(active);
+    return this.db.ticket.findFirst({
+      where: {
+        guildId: this.guild.id,
+        ownerId,
+        status: { in: ['CREATING', 'OPEN', 'CLOSING', 'REOPENING'] },
+      },
+    });
+  }
   async open(
     ownerId: string,
     key: string,
@@ -25,6 +85,17 @@ export class TicketService {
     await validateRouting(this.guild, s);
     const category = s.categories.find((c) => c.key === key);
     if (!category) throw new UserError('This category no longer exists. Refresh the panel.');
+    const active = await this.activeTicket(ownerId);
+    if (active)
+      throw new UserError(
+        active.status === 'CLOSING'
+          ? 'Ticket #' +
+              active.number +
+              ' is still finishing its transcript and closure. Ask staff to check the private log channel and /bot status. Your ticket history is preserved.'
+          : 'Ticket #' +
+              active.number +
+              ' is still active. Continue there or ask staff to close it. If you cannot see its channel, ask staff to restore access.',
+      );
     const t = await reserve(this.db, {
       guildId: this.guild.id,
       ownerId,
@@ -47,6 +118,19 @@ export class TicketService {
     data: Record<string, string> = {},
     generation = t.generation,
   ) {
+    if (action === 'reopen') {
+      if (await this.reconcileMissing(t))
+        throw new UserError(
+          'This ticket channel was deleted, so it cannot be reopened. Open a new Support or Management ticket instead.',
+        );
+      const active = await this.activeTicket(t.ownerId);
+      if (active && active.id !== t.id)
+        throw new UserError(
+          'The owner already has active ticket #' +
+            active.number +
+            '. Close it before reopening this ticket.',
+        );
+    }
     try {
       await begin(this.db, t, action, actorId, data, generation);
     } catch (e) {
@@ -111,6 +195,7 @@ export class TicketService {
     try {
       let t = await this.db.ticket.findUniqueOrThrow({ where: { id } });
       if (!t.operation) return;
+      if (await this.reconcileMissing(t)) return;
       const s = (await getSettings(this.db, this.guild.id)).settings;
       const op = (t.operationData ?? {}) as Record<string, string>;
       const actorId = op.actorId ?? this.guild.client.user.id;
@@ -315,6 +400,21 @@ export class TicketService {
     });
     for (const t of pending) await this.run(t.id).catch(() => undefined);
     await this.db.confirmation.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  }
+  async reconcileActiveChannels() {
+    const tickets = await this.db.ticket.findMany({
+      where: { guildId: this.guild.id, status: 'OPEN', channelId: { not: null } },
+      take: 500,
+    });
+    for (const ticket of tickets) {
+      if (this.running.has(ticket.id)) continue;
+      await this.reconcileMissing(ticket).catch((error) =>
+        logger.warn(
+          { ticketId: ticket.id, ...safeError(error) },
+          'Could not verify ticket channel; record retained.',
+        ),
+      );
+    }
   }
   get activeOperations() {
     return this.running.size;

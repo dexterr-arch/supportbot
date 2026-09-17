@@ -82,15 +82,6 @@ export const defaults = {
       order: false,
     },
     {
-      key: 'order',
-      label: 'Order',
-      description: 'Discuss a service, budget, and deadline',
-      emoji: '🛒',
-      roleId: '',
-      parentId: '',
-      order: true,
-    },
-    {
       key: 'management',
       label: 'Management',
       description: 'Private concerns and management requests',
@@ -169,11 +160,20 @@ export type Category = z.infer<typeof categorySchema>;
 export function categoryRole(s: Settings, c: Category) {
   return c.roleId || (c.key === 'management' ? s.managementRoleId : s.supportRoleId);
 }
+// Preserve stored IDs and wording while retiring commerce options from older installs.
+export function supportOnlySettings(s: Settings): Settings {
+  const categories = s.categories
+    .filter((c) => c.key === 'support' || c.key === 'management')
+    .map((c) => ({ ...c, order: false }));
+  for (const c of defaults.categories)
+    if (!categories.some((existing) => existing.key === c.key)) categories.push({ ...c });
+  return { ...s, categories };
+}
 export async function getSettings(db: Database, guildId: string) {
   const row = await db.guildSettings.upsert({
     where: { guildId },
     create: { guildId, data: defaults },
     update: {},
   });
-  return { settings: settingsSchema.parse(row.data), revision: row.revision };
+  return { settings: supportOnlySettings(settingsSchema.parse(row.data)), revision: row.revision };
 }
