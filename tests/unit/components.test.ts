@@ -42,7 +42,13 @@ const t: Ticket = {
   transcriptGeneration: null,
 };
 describe('Discord component payloads', () => {
-  for (const kind of ['order', 'contact'] as const)
+  it('offers only support and management and has no shopping menu', () => {
+    const json = JSON.stringify(panel(s).components.map((c) => c.toJSON()));
+    expect(json).toContain('"value":"support"');
+    expect(json).toContain('"value":"management"');
+    expect(json).not.toMatch(/Order Info|Pricing|Terms of Service|"value":"order"/);
+  });
+  for (const kind of ['contact'] as const)
     it(kind + ' uses V2, valid builders, no embeds, no automatic mentions', () => {
       const payload = panel(s, kind);
       expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
@@ -54,7 +60,7 @@ describe('Discord component payloads', () => {
     });
   it('omits optional media when disabled', () => {
     const json = JSON.stringify(
-      panel({ ...s, orderBannerUrl: '', footerImageUrl: '' }, 'order').components.map((c) =>
+      panel({ ...s, contactBannerUrl: '', footerImageUrl: '' }, 'contact').components.map((c) =>
         c.toJSON(),
       ),
     );
