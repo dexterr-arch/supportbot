@@ -150,6 +150,82 @@ afterAll(async () => {
   await db.$disconnect();
 });
 describe('lifecycle orchestration with real PostgreSQL and simulated Discord', () => {
+  it.each(['support', 'management'])(
+    'allows a new %s ticket after closing the old ticket',
+    async (category) => {
+      const owner = 'new-after-close-' + category;
+      const first = await service.open(owner, category, 'First', 'Close this normally', {});
+      await service.request(first, 'close', 'staff');
+      const second = await service.open(owner, category, 'Second', 'A new request', {});
+      expect(second.status).toBe('OPEN');
+      expect(second.id).not.toBe(first.id);
+      const closed = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
+      await expect(service.request(closed, 'reopen', 'staff')).rejects.toThrow(
+        'already has active ticket',
+      );
+    },
+  );
+  it.each(['support', 'management'])(
+    'releases a stale %s ticket when its channel was manually deleted',
+    async (category) => {
+      const owner = 'missing-' + category;
+      const first = await service.open(owner, category, 'Old', 'Missing channel', {});
+      registry.delete(first.channelId!);
+      const second = await service.open(owner, category, 'New', 'No stale duplicate block', {});
+      expect(second.status).toBe('OPEN');
+      expect((await db.ticket.findUniqueOrThrow({ where: { id: first.id } })).status).toBe(
+        'DELETED',
+      );
+      expect(
+        await db.auditEvent.count({ where: { ticketId: first.id, action: 'channel_missing' } }),
+      ).toBe(1);
+    },
+  );
+  it('does not release a slot on missing access or a network failure', async () => {
+    const first = await service.open('inaccessible', 'support', 'Protected', 'Keep slot', {});
+    for (const code of [50001, 50013, 'ETIMEDOUT']) {
+      const spy = vi
+        .spyOn(service.guild.channels, 'fetch')
+        .mockRejectedValueOnce(Object.assign(new Error('Synthetic'), { code }));
+      await expect(service.activeTicket(first.ownerId)).rejects.toThrow('Synthetic');
+      spy.mockRestore();
+      expect((await db.ticket.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('OPEN');
+    }
+  });
+  it('handles Discord Unknown Channel and records the recovery only once under concurrency', async () => {
+    const first = await service.open('unknown-channel', 'support', 'Gone', 'Unknown channel', {});
+    const spy = vi
+      .spyOn(service.guild.channels, 'fetch')
+      .mockRejectedValue(Object.assign(new Error('Unknown Channel'), { code: 10003 }));
+    const result = await Promise.all([
+      service.reconcileMissing(first),
+      service.reconcileMissing(first),
+    ]);
+    spy.mockRestore();
+    expect(result.filter(Boolean)).toHaveLength(1);
+    expect(
+      await db.auditEvent.count({ where: { ticketId: first.id, action: 'channel_missing' } }),
+    ).toBe(1);
+  });
+  it.each(['support', 'management'])(
+    'staff can close and reopen the same %s channel',
+    async (category) => {
+      const first = await service.open(
+        'same-reopen-' + category,
+        category,
+        'Reopen same channel',
+        'Lifecycle',
+        {},
+      );
+      await service.request(first, 'close', 'staff');
+      const closed = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
+      await service.request(closed, 'reopen', 'staff');
+      const reopened = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
+      expect(reopened.status).toBe('OPEN');
+      expect(reopened.channelId).toBe(first.channelId);
+      expect(reopened.generation).toBe(1);
+    },
+  );
   it('creates a private channel and persists its restart-safe welcome controls', async () => {
     const t = await service.open('owner-create', 'support', 'Question', 'Help please', {});
     expect(t.status).toBe('OPEN');
