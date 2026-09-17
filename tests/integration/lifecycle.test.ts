@@ -161,7 +161,7 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
       expect(second.id).not.toBe(first.id);
       const closed = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
       await expect(service.request(closed, 'reopen', 'staff')).rejects.toThrow(
-        'already has active ticket',
+        'deleted after saving',
       );
     },
   );
@@ -207,25 +207,6 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
       await db.auditEvent.count({ where: { ticketId: first.id, action: 'channel_missing' } }),
     ).toBe(1);
   });
-  it.each(['support', 'management'])(
-    'staff can close and reopen the same %s channel',
-    async (category) => {
-      const first = await service.open(
-        'same-reopen-' + category,
-        category,
-        'Reopen same channel',
-        'Lifecycle',
-        {},
-      );
-      await service.request(first, 'close', 'staff');
-      const closed = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
-      await service.request(closed, 'reopen', 'staff');
-      const reopened = await db.ticket.findUniqueOrThrow({ where: { id: first.id } });
-      expect(reopened.status).toBe('OPEN');
-      expect(reopened.channelId).toBe(first.channelId);
-      expect(reopened.generation).toBe(1);
-    },
-  );
   it('creates a private channel and persists its restart-safe welcome controls', async () => {
     const t = await service.open('owner-create', 'support', 'Question', 'Help please', {});
     expect(t.status).toBe('OPEN');
@@ -254,32 +235,36 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
     const restarted = new TicketService(db, service.guild);
     await restarted.run(t.id);
     const closed = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
-    expect(closed.status).toBe('CLOSED');
+    expect(closed.status).toBe('DELETED');
+    expect(registry.has(t.channelId!)).toBe(false);
     expect(closed.operation).toBeNull();
     expect(closed.transcriptGeneration).toBe(0);
   });
-  it('refuses deletion when the uploaded transcript is no longer present', async () => {
-    const t = await service.open('owner-delete-fail', 'support', 'Delete guard', 'Keep safe', {});
-    await service.request(t, 'close', 'staff');
-    const closed = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
-    for (const m of log.sent.values()) m.attachments.clear();
-    await expect(service.request(closed, 'delete', 'manager')).rejects.toThrow();
-    expect(registry.get(t.channelId!)!.deleted).toBe(false);
+  it('checks the uploaded attachment again before deleting', async () => {
+    const t = await service.open('verify-fail', 'support', 'Verification', 'Keep safe', {});
+    const ticketChannel = registry.get(t.channelId!)!;
+    const original = log.messages.fetch;
+    log.messages.fetch = vi.fn(async (input: unknown) => {
+      const result = await original(input);
+      if (typeof input === 'string') (result as FakeMessage).attachments.clear();
+      return result;
+    });
+    await expect(service.request(t, 'close', 'staff')).rejects.toThrow('preserved');
+    expect(ticketChannel.deleted).toBe(false);
+    expect((await db.ticket.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('CLOSING');
   });
-  it('reopens with a fresh archive generation and allows deletion only after re-archiving', async () => {
-    const t = await service.open('owner-reopen', 'support', 'Reopen', 'Lifecycle test', {});
+  it('deletes only after transcript and audit summary are saved', async () => {
+    const t = await service.open('close-delete', 'support', 'Done', 'Transcript test', {});
+    const channel = registry.get(t.channelId!)!;
+    const deletion = vi.spyOn(channel, 'delete').mockImplementation(async () => {
+      const saved = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
+      expect(saved.transcriptGeneration).toBe(t.generation);
+      expect(log.sent.size).toBeGreaterThanOrEqual(2);
+      expect([...log.sent.values()].some((m) => m.attachments.size > 0)).toBe(true);
+      registry.delete(channel.id);
+    });
     await service.request(t, 'close', 'staff');
-    let current = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
-    await service.request(current, 'reopen', 'staff');
-    current = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
-    expect(current.status).toBe('OPEN');
-    expect(current.generation).toBe(1);
-    expect(current.transcriptGeneration).toBeNull();
-    await service.request(current, 'close', 'staff');
-    current = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
-    expect(current.transcriptGeneration).toBe(1);
-    await service.request(current, 'delete', 'manager');
+    expect(deletion).toHaveBeenCalledOnce();
     expect((await db.ticket.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('DELETED');
-    expect(registry.has(t.channelId!)).toBe(false);
   });
 });
