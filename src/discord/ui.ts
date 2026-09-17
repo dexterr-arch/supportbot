@@ -27,39 +27,24 @@ export function text(content: string) {
 function media(url: string) {
   return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(url));
 }
-export function panel(s: Settings, kind: 'order' | 'contact') {
-  const order = kind === 'order';
+export function panel(s: Settings, kind: 'contact' = 'contact') {
   const c = new ContainerBuilder().setAccentColor(parseInt(s.accentColor.slice(1), 16));
-  const banner = order ? s.orderBannerUrl : s.contactBannerUrl;
-  if (banner) c.addMediaGalleryComponents(media(banner));
-  c.addTextDisplayComponents(
-    text('# ' + (order ? s.copy.orderTitle : s.copy.contactTitle)),
-  ).addSeparatorComponents(new SeparatorBuilder());
-  c.addTextDisplayComponents(text(order ? s.copy.orderIntro : s.copy.contactIntro));
-  if (order)
-    c.addTextDisplayComponents(
-      text(s.copy.contactLink + ' <#' + (s.contactChannelId || s.panelChannelId) + '>'),
-    );
-  else
-    c.addTextDisplayComponents(
+  if (s.contactBannerUrl) c.addMediaGalleryComponents(media(s.contactBannerUrl));
+  c.addTextDisplayComponents(text('# ' + s.copy.contactTitle))
+    .addSeparatorComponents(new SeparatorBuilder())
+    .addTextDisplayComponents(
+      text(s.copy.contactIntro),
       text(
         s.categories
           .map((v) => (v.emoji || '•') + ' **' + v.label + '** — ' + v.description)
           .join('\n'),
       ),
-    );
-  c.addSeparatorComponents(new SeparatorBuilder());
+    )
+    .addSeparatorComponents(new SeparatorBuilder());
   const menu = new StringSelectMenuBuilder()
     .setCustomId('v1:panel:' + kind)
-    .setPlaceholder(order ? s.copy.learnMore : s.copy.chooseCategory);
-  if (order)
-    menu.addOptions([
-      { label: s.copy.termsLabel, value: 'terms' },
-      { label: s.copy.pricingLabel, value: 'pricing' },
-      { label: s.copy.faqLabel, value: 'faq' },
-    ]);
-  else
-    menu.addOptions(
+    .setPlaceholder(s.copy.chooseCategory)
+    .addOptions(
       s.categories.map((v) => ({
         label: v.label,
         value: v.key,
@@ -107,7 +92,13 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
     ),
   );
   c.addTextDisplayComponents(
-    text(compact(escapeMarkdown(t.description), 1200) + '\n-# Full intake: /ticket info'),
+    text(
+      compact(escapeMarkdown(t.description), 1100) +
+        '\n-# Full intake: /ticket info\n' +
+        (t.status === 'CLOSED'
+          ? '**Closed:** staff can reopen this same channel. To start a different request, use the public ticket panel.'
+          : '**Need to finish?** Use Close and confirm. Staff: Claim assigns the ticket; Escalate sends it to Management.'),
+    ),
   );
   const details = t.details as Record<string, string>;
   const detailText = Object.entries(details)
@@ -160,6 +151,7 @@ export interface Field {
   long?: boolean;
   required?: boolean;
   max?: number;
+  description?: string;
 }
 export function modal(customId: string, title: string, fields: Field[]) {
   return new ModalBuilder()
@@ -173,7 +165,11 @@ export function modal(customId: string, title: string, fields: Field[]) {
           .setRequired(f.required !== false)
           .setMaxLength(f.max ?? 200);
         if (f.value) input.setValue(f.value);
-        return new LabelBuilder().setLabel(f.label.slice(0, 45)).setTextInputComponent(input);
+        const label = new LabelBuilder()
+          .setLabel(f.label.slice(0, 45))
+          .setTextInputComponent(input);
+        if (f.description) label.setDescription(f.description);
+        return label;
       }),
     );
 }

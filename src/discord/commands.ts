@@ -4,7 +4,7 @@ const setup = new SlashCommandBuilder()
   .setDescription('Configure the support bot')
   .setContexts(InteractionContextType.Guild)
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-  .addSubcommand((c) => c.setName('panels').setDescription('Post or refresh the two public panels'))
+  .addSubcommand((c) => c.setName('panels').setDescription('Post or refresh the support panel'))
   .addSubcommand((c) =>
     c.setName('settings').setDescription('Edit server configuration privately'),
   );
