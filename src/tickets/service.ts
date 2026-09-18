@@ -250,21 +250,16 @@ export class TicketService {
           if (previous)
             await this.db.ticket.update({ where: { id }, data: { welcomeMessageId: previous.id } });
           else {
-            const payload = ticketPanel(s, { ...t, status: 'OPEN', operation: null }, true);
+            const payload = ticketPanel(s, { ...t, status: 'OPEN', operation: null });
             const sent = await channel.send({
               ...payload,
-              allowedMentions: {
-                parse: [],
-                users: [t.ownerId],
-                roles: [t.roleId],
-                repliedUser: false,
-              },
               nonce: String(t.number),
               enforceNonce: true,
             });
             await this.db.ticket.update({ where: { id }, data: { welcomeMessageId: sent.id } });
           }
         }
+        await this.notifyOpening(t, channel);
         await this.finish(t, actorId, 'OPEN');
         return;
       }
@@ -400,6 +395,59 @@ export class TicketService {
     } finally {
       this.running.delete(id);
     }
+  }
+  async notifyOpening(t: Ticket, channel: TextChannel) {
+    const action = 'opening_notification';
+    const { settings } = await getSettings(this.db, this.guild.id);
+    const notificationRoleId = settings.supportRoleId;
+    if (await this.db.auditEvent.findFirst({ where: { ticketId: t.id, action } })) return;
+    const content =
+      '<@&' +
+      notificationRoleId +
+      '> <@' +
+      t.ownerId +
+      '>\nTicket #' +
+      t.number +
+      ' is ready for staff.';
+    // Recover an acknowledged or ambiguously delivered message without re-pinging.
+    let before: string | undefined;
+    let messageId: string | undefined;
+    for (;;) {
+      const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      const previous = batch.find(
+        (m) => m.author.id === this.guild.client.user.id && m.content === content,
+      );
+      if (previous) {
+        messageId = previous.id;
+        break;
+      }
+      if (!batch.size) break;
+      const oldest = batch.last()!.id;
+      if (oldest === before) throw new Error('Notification recovery pagination did not advance.');
+      before = oldest;
+    }
+    if (!messageId) {
+      const sent = await channel.send({
+        content,
+        allowedMentions: {
+          parse: [],
+          roles: [notificationRoleId],
+          users: [t.ownerId],
+          repliedUser: false,
+        },
+        nonce: 'notify-' + t.number,
+        enforceNonce: true,
+      });
+      messageId = sent.id;
+    }
+    await this.db.auditEvent.create({
+      data: {
+        ticketId: t.id,
+        actorId: this.guild.client.user.id,
+        action,
+        detail: messageId,
+      },
+    });
   }
   async recover() {
     const pending = await this.db.ticket.findMany({
