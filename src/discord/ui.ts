@@ -66,7 +66,7 @@ export function panel(s: Settings, kind: 'contact' = 'contact') {
 export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
   const c = new ContainerBuilder().setAccentColor(parseInt(s.accentColor.slice(1), 16));
   c.addTextDisplayComponents(
-    text('# Ticket #' + t.number + ' · ' + escapeMarkdown(s.brandName)),
+    text('# Ticket #' + t.number),
     text(
       compact(s.copy.welcome || 'Welcome to your ticket.', 250) +
         (notifyRole ? '\n<@&' + t.roleId + '>' : ''),
@@ -85,8 +85,6 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
         Math.floor(t.createdAt.getTime() / 1000) +
         ':F>\n**Status:** ' +
         t.status +
-        '\n**Priority:** ' +
-        t.priority +
         '\n**Assigned:** ' +
         (t.claimId ? '<@' + t.claimId + '>' : 'Unclaimed'),
     ),
@@ -97,7 +95,7 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
         '\n-# Full intake: /ticket info\n' +
         (t.status === 'CLOSED'
           ? '**Closed:** staff can reopen this same channel. To start a different request, use the public ticket panel.'
-          : '**Need to finish?** Use Close and confirm. Staff: Claim assigns the ticket; Escalate sends it to Management.'),
+          : '**Close ticket:** save the transcript to the staff log, then permanently delete this channel. Confirmation required. Staff: Claim assigns the ticket to you.'),
     ),
   );
   const details = t.details as Record<string, string>;
@@ -109,18 +107,7 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
   const actions =
     t.status === 'CLOSED'
       ? ['reopen', 'delete', 'transcript']
-      : [
-          'claim',
-          'unclaim',
-          'close',
-          'add',
-          'remove',
-          'rename',
-          'escalate',
-          'move',
-          'priority',
-          'transcript',
-        ];
+      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename', 'move', 'transcript'];
   for (let i = 0; i < actions.length; i += 5) {
     const row = new ActionRowBuilder<ButtonBuilder>();
     for (const action of actions.slice(i, i + 5))

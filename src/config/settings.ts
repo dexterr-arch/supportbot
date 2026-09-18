@@ -55,7 +55,7 @@ export const copySchema = z
   })
   .strict();
 export const defaults = {
-  brandName: 'Orange Support',
+  brandName: 'Support',
   accentColor: '#FF6B24',
   supportRoleId: '',
   managementRoleId: '',

@@ -69,6 +69,10 @@ describe('Discord component payloads', () => {
   it('renders all persistent ticket controls within limits', () => {
     const data = ticketPanel(s, t).components.map((c) => c.toJSON());
     expect(count(data)).toBeLessThanOrEqual(40);
+    expect(JSON.stringify(data)).not.toMatch(
+      /Orange Support|Priority|Escalate|v1:t:priority|v1:t:escalate/,
+    );
+    expect(JSON.stringify(data)).toContain('permanently delete');
     for (const action of [
       'claim',
       'unclaim',
@@ -76,9 +80,7 @@ describe('Discord component payloads', () => {
       'add',
       'remove',
       'rename',
-      'escalate',
       'move',
-      'priority',
       'transcript',
     ])
       expect(JSON.stringify(data)).toContain('v1:t:' + action + ':' + t.id);

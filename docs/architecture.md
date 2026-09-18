@@ -23,9 +23,7 @@ PostgreSQL migrations include a **partial unique index** on guild/owner for CREA
 ## State transitions
 
 ```text
-CREATING → OPEN → CLOSING → CLOSED → DELETING → DELETED
-              ↑               |
-              └─ REOPENING ←──┘
+CREATING -> OPEN -> CLOSING -> DELETED
 ```
 
 The claim is independent of OPEN state. Claiming uses one conditional database update, so competing claimants cannot overwrite the winner. Operation acquisition also uses one conditional update with expected lifecycle and generation. Database transactions are short and never held open across Discord requests.
@@ -43,15 +41,15 @@ This is not a distributed transaction with Discord. Channel creation uses a dura
 5. Store all numbered HTML parts in PostgreSQL in a transaction.
 6. Upload each part to the validated private log and record message IDs.
 7. Post the audit summary and record the successful transcript generation.
-8. Move the channel without syncing parent permissions, reapply the locked policy, and finalize CLOSED.
+8. Verify all uploaded attachments, delete the channel, and finalize DELETED.
 
 The close timestamp denotes when closure was accepted; final upload may finish later. Administrators bypass Discord locks. Transcripts are a snapshot of available messages, not a forensic history of edits or deletions.
 
 A failed step retains the operation and channel. Already-created transcript parts are reused after restart. If the log destination is changed during an unfinished upload, restore the previous destination until the operation completes. Changing routing does not silently send parts of one transcript to multiple channels.
 
-Delete requires CLOSED state, a fresh user confirmation, and live verification of every attachment for the current generation. There is no automatic deletion policy. If an upload is missing, deletion remains pending and the channel survives. Restore the archived message/attachment through an operator-reviewed recovery, or preserve the channel; do not remove the database safety marker to force deletion.
+Delete requires CLOSED state, a fresh user confirmation, and live verification of every attachment for the current generation. New closes save and verify transcripts before deleting automatically; the separate Delete control applies only to legacy archived channels. If an upload is missing, deletion remains pending and the channel survives. Restore the archived message/attachment through an operator-reviewed recovery, or preserve the channel; do not remove the database safety marker to force deletion.
 
-Reopening restores the original destination and current recorded access policy, clears closure metadata, and increments the transcript generation in the same transaction that clears its operation. A second active ticket for that owner blocks reopening.
+For legacy archived channels only, reopening restores the original destination and current recorded access policy, clears closure metadata, and increments the transcript generation in the same transaction that clears its operation. A second active ticket for that owner blocks reopening.
 
 ## Security boundaries
 

@@ -45,7 +45,7 @@ export function overwrites(
   const people = [...new Set([ownerId, ...members])].filter((id) => id !== botId);
   return [
     { id: guildId, type: 0, deny: [P.ViewChannel, ...writePermissions] },
-    { id: botId, type: 1, allow: botPermissions },
+    { id: botId, type: 1, allow: [...botPermissions, P.MentionEveryone] },
     {
       id: roleId,
       type: 0,
@@ -113,7 +113,6 @@ export async function validateRouting(guild: Guild, s: Settings) {
     'supportRoleId',
     'managementRoleId',
     'ticketCategoryId',
-    'archiveCategoryId',
     'transcriptLogChannelId',
     'panelChannelId',
   ] as const)
@@ -129,7 +128,6 @@ export async function validateRouting(guild: Guild, s: Settings) {
   }
   for (const id of new Set([
     s.ticketCategoryId,
-    s.archiveCategoryId,
     ...s.categories.map((c) => c.parentId).filter(Boolean),
   ])) {
     const c = await guild.channels.fetch(id);

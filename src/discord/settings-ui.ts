@@ -26,7 +26,6 @@ export const groups: Record<string, string[]> = {
     'supportRoleId',
     'managementRoleId',
     'ticketCategoryId',
-    'archiveCategoryId',
     'transcriptLogChannelId',
     'panelChannelId',
   ],
@@ -41,9 +40,7 @@ export const groups: Record<string, string[]> = {
     'add',
     'remove',
     'rename',
-    'escalate',
     'move',
-    'priority',
     'reopen',
     'delete',
     'transcript',
@@ -321,9 +318,7 @@ export async function validatePresentIds(guild: Guild, s: Settings) {
       throw new UserError('Choose existing non-administrator support roles in this server.');
   }
   for (const id of new Set(
-    [s.ticketCategoryId, s.archiveCategoryId, ...s.categories.map((c) => c.parentId)].filter(
-      Boolean,
-    ),
+    [s.ticketCategoryId, ...s.categories.map((c) => c.parentId)].filter(Boolean),
   )) {
     const c = await guild.channels.fetch(id);
     if (c?.type !== ChannelType.GuildCategory)

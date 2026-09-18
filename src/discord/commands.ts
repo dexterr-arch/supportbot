@@ -30,7 +30,7 @@ ticket.addSubcommand((c) =>
 ticket.addSubcommand((c) =>
   c
     .setName('close')
-    .setDescription('Close with confirmation')
+    .setDescription('Save transcript and delete this channel with confirmation')
     .addStringOption((o) =>
       o.setName('reason').setDescription('Optional closing reason').setMaxLength(1000),
     ),
