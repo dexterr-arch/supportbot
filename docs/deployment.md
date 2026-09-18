@@ -91,17 +91,16 @@ These checks require your own token and a test server; automated simulated tests
 - Invite with only the documented permissions. Verify the bot works without Administrator.
 - Configure all roles/channels and post panels twice; confirm one pair remains.
 - Check both panels on desktop and mobile, with images enabled and disabled.
-- Verify Terms/Pricing/FAQ replies are private.
-- Open each category and verify order fields.
+- Open Support and Management and verify subject/description fields and the assigned staff ping.
 - Double-submit creation and try another category; confirm only one active ticket.
 - Verify an unrelated member cannot view tickets or transcript logs.
 - Race two staff Claim actions; confirm one winner.
 - Restart the bot and use existing controls.
 - Add/remove a test member; confirm actual access changes.
-- Rename, move, change priority, and escalate; confirm old staff access is removed after escalation.
+- Rename and move a ticket; verify permissions remain correct. Confirm Escalate and Priority are absent.
 - Close, cancel confirmation, close again with a reason, inspect HTML and audit summary.
 - Remove bot Attach Files permission temporarily and close another test ticket; verify the channel is preserved. Restore permission and verify recovery completes.
-- Reopen and close again; confirm a new transcript generation.
+- Confirm a successful close saves the transcript and deletes the channel. Open a new ticket afterward.
 - Attempt deletion with a missing transcript attachment; verify the channel is preserved.
 - Confirm a successful deletion only after verifying the current archive.
 - Confirm ordinary members cannot edit settings or perform staff-only actions.
@@ -113,7 +112,7 @@ These checks require your own token and a test server; automated simulated tests
 
 **Privileged-intent error:** Enable Message Content in the Portal; obtain approval if Discord requires it. Do not add unrelated intents.
 
-**Configuration rejected:** Use real IDs from this server. Ticket/archive destinations must be categories; log/panel/contact destinations must be ordinary text channels. Support roles cannot be managed roles, @everyone, or Administrator roles.
+**Configuration rejected:** Use real IDs from this server. Ticket destinations must be categories; log/panel/contact destinations must be ordinary text channels. Support roles cannot be managed roles, @everyone, or Administrator roles.
 
 **Transcript channel privacy error:** Remove View Channel from unrelated roles/member overrides. Only configured staff roles, the bot, and administrators should see it.
 
