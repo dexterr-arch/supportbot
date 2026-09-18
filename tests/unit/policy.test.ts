@@ -49,6 +49,8 @@ describe('ticket authorization', () => {
 });
 describe('channel access', () => {
   it('allows role notification only through the bot private-channel overwrite', () => {
+    const creation = overwrites('guild', 'bot', 'owner', 'support', [], false, false);
+    expect(new PermissionsBitField(creation[1]!.allow).has(P.MentionEveryone)).toBe(false);
     const rows = overwrites('guild', 'bot', 'owner', 'support', [], false);
     for (const row of rows)
       expect(new PermissionsBitField(row.allow).has(P.MentionEveryone)).toBe(row.id === 'bot');
