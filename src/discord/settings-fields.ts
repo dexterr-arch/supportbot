@@ -52,7 +52,7 @@ export const fields: Record<string, { label: string; description: string; max?: 
   },
   managementRoleId: {
     label: 'Management team role',
-    description: 'Who can see Management tickets and handle escalation. Use a non-admin role.',
+    description: 'Who can see and manage Management tickets. Use a non-admin role.',
   },
   ticketCategoryId: {
     label: 'Open tickets folder',
