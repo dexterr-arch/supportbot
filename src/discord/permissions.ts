@@ -41,11 +41,16 @@ export function overwrites(
   roleId: string,
   members: readonly string[],
   locked: boolean,
+  notifyRole = true,
 ): OverwriteResolvable[] {
   const people = [...new Set([ownerId, ...members])].filter((id) => id !== botId);
   return [
     { id: guildId, type: 0, deny: [P.ViewChannel, ...writePermissions] },
-    { id: botId, type: 1, allow: [...botPermissions, P.MentionEveryone] },
+    {
+      id: botId,
+      type: 1,
+      allow: notifyRole ? [...botPermissions, P.MentionEveryone] : botPermissions,
+    },
     {
       id: roleId,
       type: 0,
