@@ -1,4 +1,4 @@
-# Orange Support Ticket Bot
+# Support Ticket Bot
 
 **Support-only edition:** this update publishes one Contact panel with Support and Management. It removes the tracked Order Info panel when `/setup panels` runs. See [SUPPORT-ONLY-UPDATE.md](SUPPORT-ONLY-UPDATE.md) for upgrading an existing Railway deployment. Legacy commerce settings remain compatible with existing databases but are hidden from the interface.
 
@@ -56,15 +56,15 @@ Enable **User Settings → Advanced → Developer Mode**. Right-click the server
 Create:
 
 - A Support role and a Management role. These must be ordinary roles without Administrator.
-- An **Open Tickets** category and a **Closed Tickets** category.
+- An **Open Tickets** category.
 - A private **ticket-logs** standard text channel.
 - A public **support-desk** standard text channel for the Contact panel.
 
 For ticket-logs, deny View Channel to @everyone. Allow only configured staff roles, the bot, and administrators. Remove unrelated role/member grants. The bot validates that this channel is private before uploading transcripts.
 
-Give the bot its required permissions on both ticket categories and the log/panel channels. Place its role above the staff roles as a practical setup precaution. Keep human staff roles free of channel-management powers unless they need them outside this bot.
+Give the bot its required permissions on the ticket category and the log/panel channels. Place its role above the staff roles as a practical setup precaution. Keep human staff roles free of channel-management powers unless they need them outside this bot.
 
-Make support notification roles **mentionable** if you want the one-time role mention to notify staff without granting Mention Everyone. The bot never enables this setting itself. After escalation, only the replacement category role retains role-based ticket access; administrators always bypass channel overwrites under Discord's permission rules.
+On opening, the bot pings the assigned category staff role once. It grants only itself Mention Everyone inside that private ticket, and allowedMentions permits only the ticket owner and assigned role. No server-wide mention permission or public role-mentionability change is needed. Management tickets notify Management without exposing the ticket to Support.
 
 ## 3. Local Docker test on Windows
 
@@ -113,16 +113,16 @@ Only server administrators can use `/setup settings` and `/setup panels`. There 
 
 Run **/setup settings** to open a private setup dashboard. It lists the destinations you still need to choose. No database editing or JSON is needed.
 
-| Section                     | What it does                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 1. Channels & staff roles   | Choose team roles, the public panel channel, open/closed ticket folders and private transcript log using Discord pickers. |
-| 2. Support & Management     | Edit either option's name, description and emoji. Optional staff-role and ticket-folder pickers override the defaults.    |
-| 3. Name & appearance        | Set the brand name, accent color and ticket-action cooldown.                                                              |
-| 4. Banner & footer images   | Set public HTTPS image URLs, or leave blank to hide images.                                                               |
-| 5. Panel & welcome messages | Write the public instructions, ticket welcome and privacy note.                                                           |
-| 6. Button & form wording    | Advanced customization of displayed labels.                                                                               |
+| Section                     | What it does                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 1. Channels & staff roles   | Choose team roles, the public panel channel, open ticket folder and private transcript log using Discord pickers.      |
+| 2. Support & Management     | Edit either option's name, description and emoji. Optional staff-role and ticket-folder pickers override the defaults. |
+| 3. Name & appearance        | Set the brand name, accent color and ticket-action cooldown.                                                           |
+| 4. Banner & footer images   | Set public HTTPS image URLs, or leave blank to hide images.                                                            |
+| 5. Panel & welcome messages | Write the public instructions, ticket welcome and privacy note.                                                        |
+| 6. Button & form wording    | Advanced customization of displayed labels.                                                                            |
 
-Start with Channels & staff roles. Choose the Support and Management roles first, then the open-ticket and closed-ticket Discord categories, the staff-only log, and the public panel text channel. Human staff roles must not have Administrator. The private log must deny access to unrelated roles and members.
+Start with Channels & staff roles. Choose the Support and Management roles first, then the open-ticket Discord category, the staff-only log, and the public panel text channel. Human staff roles must not have Administrator. The private log must deny access to unrelated roles and members.
 
 Each editor explains its purpose. After saving, use **Setup home** to continue. Click **Post / refresh panel** when ready (or run **/setup panels**). This publishes a single Contact panel with Support and Management and retires the old tracked Order Info message. Repeated use updates the recorded message. Existing configured branding and images are preserved.
 
@@ -132,7 +132,7 @@ Images are optional. Use a public HTTPS image URL. Discord controls the displaye
 
 ## 5. Use tickets
 
-Members choose Support or Management in the Contact panel and submit the modal. This opens a NEW request. Staff use Reopen inside a closed ticket to resume the SAME request. Closed tickets do not block new requests. A deleted channel cannot be reopened; open a new ticket instead. One active ticket per member per server is enforced by a PostgreSQL unique index, including tickets being created/closed/reopened.
+Members choose Support or Management in the Contact panel and submit the modal. This opens a NEW request. Close saves the transcript and deletes the channel after confirmation. Completed tickets do not block new requests. Reopen remains only for legacy archived channels. A deleted channel cannot be reopened; open a new ticket instead. One active ticket per member per server is enforced by a PostgreSQL unique index, including tickets being created/closed/reopened.
 
 A ticket grants channel access to its owner, its category role, the bot, administrators, and explicitly added members. Added members can converse but do not receive staff management powers.
 
@@ -143,16 +143,15 @@ A ticket grants channel access to its owner, its category role, the bot, adminis
 | Claim / Unclaim                                     | Category staff; only claimant or management/admin can unclaim   |
 | Add/Remove Member / `/ticket add`, `/ticket remove` | Authorized staff                                                |
 | Rename / `/ticket rename`                           | Authorized staff                                                |
-| Move / Priority                                     | Authorized staff                                                |
-| Escalate                                            | Management or administrators; replaces access with Management   |
+| Move                                                | Authorized staff                                                |
 | Reopen / `/ticket reopen`                           | Authorized staff                                                |
 | Delete / `/ticket delete`                           | Management or administrators; requires confirmation             |
 | Transcript / `/ticket transcript`                   | Authorized staff; private on-demand export                      |
 | `/bot status`                                       | Members; pending-operation count shown only to administrators   |
 
-Use ticket commands **inside that ticket's channel**. Add/Remove buttons ask for a member ID; slash commands offer Discord's member picker. Priority options are low, normal, high, and urgent. Confirmations expire after two minutes. The default interaction cooldown is three seconds.
+Use ticket commands **inside that ticket's channel**. Add/Remove buttons ask for a member ID; slash commands offer Discord's member picker. Confirmations expire after two minutes. The default interaction cooldown is three seconds.
 
-On closure, the bot freezes conversation, snapshots available messages, stores/upload transcripts, posts a summary, moves the channel to the archive category, and finalizes CLOSED state. Closed channels remain readable by authorized participants. Administrators bypass locks. Reopening starts a new transcript generation, so an old archive cannot authorize deletion of a later conversation.
+On closure, the bot freezes conversation, snapshots available messages, saves and uploads transcripts, posts an audit summary, verifies all uploaded attachments, deletes the channel, and finalizes DELETED state. There is no archive category requirement. Failed uploads or verification keep the channel intact for recovery. Deleted tickets cannot be reopened; use the public panel to create a new request. Legacy archived tickets retain their existing reopen/delete controls.
 
 If transcript generation or upload fails, the channel stays preserved in CLOSING. Recovery retries every 30 seconds and after restarts. Correct the reported configuration/permission issue; do not manually delete the channel. Permanent deletion is blocked unless all current-cycle transcript attachments can still be verified in the private log.
 
