@@ -231,11 +231,14 @@ export class TicketService {
                     t.roleId,
                     [],
                     false,
+                    false,
                   ),
                   reason: 'Create support ticket #' + t.number,
                 });
           t = await this.db.ticket.update({ where: { id }, data: { channelId: channel.id } });
         }
+        // Notification permission is added after creation, using the bot channel overwrite.
+        await this.applyAccess(t, channel, false);
         if (!t.welcomeMessageId) {
           // Search after ambiguous delivery before sending again. The channel is new and private.
           const recent = await channel.messages.fetch({ limit: 100 });
