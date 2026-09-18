@@ -64,7 +64,7 @@ For ticket-logs, deny View Channel to @everyone. Allow only configured staff rol
 
 Give the bot its required permissions on the ticket category and the log/panel channels. Place its role above the staff roles as a practical setup precaution. Keep human staff roles free of channel-management powers unless they need them outside this bot.
 
-On opening, the bot pings the assigned category staff role once. It grants only itself Mention Everyone inside that private ticket, and allowedMentions permits only the ticket owner and assigned role. No server-wide mention permission or public role-mentionability change is needed. Management tickets notify Management without exposing the ticket to Support.
+On opening, the bot pings the configured Support Team role once in a separate plain-text message for both categories. It grants only itself Mention Everyone inside that private ticket, and allowedMentions permits only the ticket owner and Support Team role. No server-wide mention permission or public role-mentionability change is needed. Management ticket access still comes only from its configured Management role; the notification does not grant Support Team members access. Members who cannot view the ticket cannot follow its link or read it. Notification messages remain visible when ticket controls refresh.
 
 ## 3. Local Docker test on Windows
 
