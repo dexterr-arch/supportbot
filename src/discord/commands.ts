@@ -42,4 +42,13 @@ const bot = new SlashCommandBuilder()
   .setDescription('Bot diagnostics')
   .setContexts(InteractionContextType.Guild)
   .addSubcommand((c) => c.setName('status').setDescription('Show bot connectivity and uptime'));
-export const commands = [setup, ticket, bot].map((c) => c.toJSON());
+const addrole = new SlashCommandBuilder()
+  .setName('addrole')
+  .setDescription('Give a server member a role')
+  .setContexts(InteractionContextType.Guild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+  .addUserOption((o) =>
+    o.setName('user').setDescription('Member receiving the role').setRequired(true),
+  )
+  .addRoleOption((o) => o.setName('role').setDescription('Role to add').setRequired(true));
+export const commands = [setup, ticket, bot, addrole].map((c) => c.toJSON());

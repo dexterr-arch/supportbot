@@ -89,15 +89,7 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
         (t.claimId ? '<@' + t.claimId + '>' : 'Unclaimed'),
     ),
   );
-  c.addTextDisplayComponents(
-    text(
-      compact(escapeMarkdown(t.description), 1100) +
-        '\n-# Full intake: /ticket info\n' +
-        (t.status === 'CLOSED'
-          ? '**Closed:** staff can reopen this same channel. To start a different request, use the public ticket panel.'
-          : '**Close ticket:** save the transcript to the staff log, then permanently delete this channel. Confirmation required. Staff: Claim assigns the ticket to you.'),
-    ),
-  );
+  c.addTextDisplayComponents(text(compact(escapeMarkdown(t.description), 1100)));
   const details = t.details as Record<string, string>;
   const detailText = Object.entries(details)
     .map(([k, v]) => '**' + escapeMarkdown(k) + ':** ' + escapeMarkdown(v))
@@ -106,8 +98,8 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
   c.addSeparatorComponents(new SeparatorBuilder());
   const actions =
     t.status === 'CLOSED'
-      ? ['reopen', 'delete', 'transcript']
-      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename', 'move', 'transcript'];
+      ? ['reopen', 'delete']
+      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename'];
   for (let i = 0; i < actions.length; i += 5) {
     const row = new ActionRowBuilder<ButtonBuilder>();
     for (const action of actions.slice(i, i + 5))
@@ -122,9 +114,6 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
       );
     c.addActionRowComponents(row);
   }
-  c.addTextDisplayComponents(
-    text('-# ' + compact(s.copy.privacy || 'Private support ticket.', 250)),
-  );
   return {
     flags: MessageFlags.IsComponentsV2 as const,
     components: [c],
