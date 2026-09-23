@@ -70,19 +70,9 @@ describe('Discord component payloads', () => {
     const data = ticketPanel(s, t).components.map((c) => c.toJSON());
     expect(count(data)).toBeLessThanOrEqual(40);
     expect(JSON.stringify(data)).not.toMatch(
-      /Orange Support|Priority|Escalate|v1:t:priority|v1:t:escalate/,
+      /Orange Support|Priority|Escalate|v1:t:priority|v1:t:escalate|Full intake|Close ticket:|v1:t:move|v1:t:transcript/,
     );
-    expect(JSON.stringify(data)).toContain('permanently delete');
-    for (const action of [
-      'claim',
-      'unclaim',
-      'close',
-      'add',
-      'remove',
-      'rename',
-      'move',
-      'transcript',
-    ])
+    for (const action of ['claim', 'unclaim', 'close', 'add', 'remove', 'rename'])
       expect(JSON.stringify(data)).toContain('v1:t:' + action + ':' + t.id);
   });
   it('closed controls allow reopening and confirmed deletion', () => {
@@ -144,6 +134,6 @@ describe('Discord component payloads', () => {
       );
     }
     expect(visible(payload)).toBeLessThan(4000);
-    expect(JSON.stringify(payload)).toContain('/ticket info');
+    expect(JSON.stringify(payload)).not.toContain('/ticket info');
   });
 });
