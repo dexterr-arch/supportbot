@@ -353,7 +353,6 @@ export class Router {
         'add',
         'remove',
         'rename',
-        'move',
         'transcript',
       ].includes(action)
     )
