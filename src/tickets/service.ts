@@ -118,7 +118,7 @@ export class TicketService {
     data: Record<string, string> = {},
     generation = t.generation,
   ) {
-    if (action === 'escalate' || action === 'priority')
+    if (action === 'escalate' || action === 'priority' || action === 'move')
       throw new UserError('This control has been removed.');
     if (action === 'reopen' && t.status === 'DELETED')
       throw new UserError(
@@ -475,7 +475,14 @@ export class TicketService {
       await this.reconcileMissing(ticket)
         .then(async (missing) => {
           if (!missing && !ticket.operation) {
-            await this.applyAccess(ticket, await this.getChannel(ticket), false);
+            const channel = await this.getChannel(ticket);
+            const { settings } = await getSettings(this.db, this.guild.id);
+            const folder = settings.categories.find((c) => c.key === ticket.categoryKey)?.parentId;
+            await this.applyAccess(ticket, channel, false);
+            if (folder && channel.parentId !== folder)
+              await channel.setParent(folder, { lockPermissions: false });
+            if (folder && ticket.parentId !== folder)
+              await this.db.ticket.update({ where: { id: ticket.id }, data: { parentId: folder } });
             await this.refresh(ticket.id);
           }
         })

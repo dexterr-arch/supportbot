@@ -1,3 +1,11 @@
+# Simple ticket controls and role assignment
+
+Use `/addrole user:@member role:@role` to give a member a role with Discord's member and role pickers. You need Manage Roles. Your highest role and the bot's highest role must be above the selected role and member; the server owner bypasses only their own hierarchy check. Managed integration roles and @everyone are rejected. Results are private and do not ping anyone.
+
+Ticket messages show the subject, category, creator, time, status, assigned staff, and description. Controls are Claim, Unclaim, Close, Add Member, Remove Member, and Rename. Closing still requires confirmation and saves the transcript to the staff log before deleting. Staff can generate a manual transcript using `/ticket transcript`. Full details remain available using `/ticket info`.
+
+Each type uses its configured folder. Existing open tickets are moved to their explicit category folder on startup, preserving private permissions. Configure the folders with `/setup settings` → Support & Management.
+
 # Basic Support and Management setup
 
 1. Run `/setup settings` and select **Channels & staff roles**. Set **Support team role** to the shared Support Team role, and **Management team role** to the distinct Management role.

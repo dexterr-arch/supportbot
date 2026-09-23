@@ -30,6 +30,7 @@ import {
 } from './settings-ui.js';
 import { collect } from '../transcripts/service.js';
 import { renderParts } from '../transcripts/html.js';
+import { validateRoleAssignment } from './role-policy.js';
 export class Router {
   private cooldowns = new Map<string, number>();
   private publishing = false;
@@ -53,13 +54,50 @@ export class Router {
       if (!setupInteraction) this.cooldowns.set(key, now + s.cooldownSeconds * 1000);
       if (this.cooldowns.size > 5000)
         for (const [id, expiry] of this.cooldowns) if (expiry < now) this.cooldowns.delete(id);
-      const member = await this.service.guild.members.fetch(i.user.id);
+      const member = await this.service.guild.members.fetch({ user: i.user.id, force: true });
       const actor: Actor = {
         id: i.user.id,
         admin: member.permissions.has(PermissionFlagsBits.Administrator),
         roles: [...member.roles.cache.keys()],
       };
       if (i.isChatInputCommand()) {
+        if (i.commandName === 'addrole') {
+          await i.deferReply({ flags: MessageFlags.Ephemeral });
+          const guild = this.service.guild;
+          const target = await guild.members.fetch({
+            user: i.options.getUser('user', true).id,
+            force: true,
+          });
+          const role = await guild.roles.fetch(i.options.getRole('role', true).id);
+          if (!role) throw new UserError('That role no longer exists.');
+          const me = await guild.members.fetchMe({ force: true });
+          validateRoleAssignment({
+            canManageRoles: member.permissions.has(PermissionFlagsBits.ManageRoles),
+            isGuildOwner: member.id === guild.ownerId,
+            actorAboveRole: member.roles.highest.comparePositionTo(role) > 0,
+            actorAboveTarget:
+              target.id !== guild.ownerId &&
+              member.roles.highest.comparePositionTo(target.roles.highest) > 0,
+            botCanManageRoles: me.permissions.has(PermissionFlagsBits.ManageRoles),
+            botAboveRole: me.roles.highest.comparePositionTo(role) > 0,
+            botAboveTarget:
+              target.id !== guild.ownerId &&
+              me.roles.highest.comparePositionTo(target.roles.highest) > 0,
+            managedRole: role.managed,
+            everyoneRole: role.id === guild.id,
+          });
+          if (target.roles.cache.has(role.id)) {
+            await privateReply(i, 'This member already has that role.');
+            return;
+          }
+          await target.roles.add(role, '/addrole requested by ' + member.id);
+          logger.info(
+            { actorId: member.id, targetId: target.id, roleId: role.id },
+            'Member role added.',
+          );
+          await privateReply(i, 'Added <@&' + role.id + '> to <@' + target.id + '>.');
+          return;
+        }
         if (i.commandName === 'setup') {
           this.admin(actor);
           if (i.options.getSubcommand() === 'settings') {
@@ -315,7 +353,6 @@ export class Router {
         'add',
         'remove',
         'rename',
-        'move',
         'transcript',
       ].includes(action)
     )

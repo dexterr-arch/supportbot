@@ -1,3 +1,7 @@
+# September 23 UI and role-command update
+
+Formatting, lint, TypeScript, production build, and 77 automated tests passed locally. Coverage includes role assignment authorization and hierarchy, simplified ticket payloads, separate folder routing, and startup correction of misplaced Management tickets. PostgreSQL tests use a disposable database with simulated Discord channels. Live role assignment has not been tested.
+
 # September 23 category access and notification update
 
 Local validation: formatting, ESLint, TypeScript, production build, and all 65 tests passed. Integration tests use a disposable PostgreSQL database and simulated Discord channels. They verify both category access policies, persistent role notifications, and retry deduplication. No live Discord notification delivery test was performed. Docker verification runs in GitHub Actions because Docker is unavailable on this computer.

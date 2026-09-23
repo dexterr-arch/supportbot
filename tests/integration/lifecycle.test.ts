@@ -107,6 +107,10 @@ beforeAll(async () => {
       guildId,
       data: {
         ...defaults,
+        categories: defaults.categories.map((c) => ({
+          ...c,
+          parentId: c.key === 'management' ? '900000000000000010' : '900000000000000009',
+        })),
         supportRoleId: '900000000000000004',
         managementRoleId: '900000000000000005',
         ticketCategoryId: '900000000000000006',
@@ -219,6 +223,9 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
     async (category) => {
       const t = await service.open('notify-' + category, category, 'Notify', 'Help', {});
       const channel = registry.get(t.channelId!)!;
+      expect(channel.parentId).toBe(
+        category === 'management' ? '900000000000000010' : '900000000000000009',
+      );
       const notification = [...channel.sent.values()].find((m) =>
         m.content.includes('is ready for staff.'),
       )!;
@@ -246,6 +253,20 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
       ).toBe(1);
     },
   );
+  it('moves existing tickets into their configured folders while preserving private access', async () => {
+    const t = await service.open('wrong-folder', 'management', 'Folder', 'Move safely', {});
+    const channel = registry.get(t.channelId!)!;
+    channel.parentId = '900000000000000009';
+    await db.ticket.update({ where: { id: t.id }, data: { parentId: channel.parentId } });
+    await service.reconcileActiveChannels();
+    expect(channel.parentId).toBe('900000000000000010');
+    expect((await db.ticket.findUniqueOrThrow({ where: { id: t.id } })).parentId).toBe(
+      channel.parentId,
+    );
+    expect((channel.access as { id: string }[]).map((row) => row.id)).not.toContain(
+      '900000000000000004',
+    );
+  });
   it('keeps a ticket and pending operation when transcript upload fails, then resumes', async () => {
     const t = await service.open(
       'owner-failure',
