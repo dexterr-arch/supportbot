@@ -225,6 +225,7 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
       expect(notification.content).toContain('<@&900000000000000004>');
       const access = channel.access as { id: string }[];
       expect(access.some((row) => row.id === t.roleId)).toBe(true);
+      expect(access.some((row) => row.id === '900000000000000005')).toBe(true);
       if (category === 'management')
         expect(access.some((row) => row.id === '900000000000000004')).toBe(false);
       expect(notification.content).toContain('<@' + t.ownerId + '>');
