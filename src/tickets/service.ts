@@ -153,15 +153,21 @@ export class TicketService {
     return textChannel(this.guild, t.channelId);
   }
   async applyAccess(t: Ticket, channel: TextChannel, locked: boolean) {
+    const { settings } = await getSettings(this.db, this.guild.id);
+    const roleId =
+      t.categoryKey === 'management' ? settings.managementRoleId : settings.supportRoleId;
+    if (t.roleId !== roleId) await this.db.ticket.update({ where: { id: t.id }, data: { roleId } });
     const participants = await this.db.participant.findMany({ where: { ticketId: t.id } });
     await channel.permissionOverwrites.set(
       overwrites(
         this.guild.id,
         this.guild.client.user.id,
         t.ownerId,
-        t.roleId,
+        roleId,
         participants.map((p) => p.userId),
         locked,
+        true,
+        settings.managementRoleId,
       ),
       'Ticket access policy',
     );
@@ -232,6 +238,7 @@ export class TicketService {
                     [],
                     false,
                     false,
+                    s.managementRoleId,
                   ),
                   reason: 'Create support ticket #' + t.number,
                 });
@@ -467,7 +474,10 @@ export class TicketService {
       if (this.running.has(ticket.id)) continue;
       await this.reconcileMissing(ticket)
         .then(async (missing) => {
-          if (!missing) await this.refresh(ticket.id);
+          if (!missing && !ticket.operation) {
+            await this.applyAccess(ticket, await this.getChannel(ticket), false);
+            await this.refresh(ticket.id);
+          }
         })
         .catch((error) =>
           logger.warn(
