@@ -214,6 +214,38 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
     expect(t.welcomeMessageId).not.toBeNull();
     expect(registry.get(t.channelId!)!.topic).toBe('support-ticket:' + t.id);
   });
+  it.each(['support', 'management'])(
+    'sends a separate persistent %s staff notification and never repeats it on refresh or recovery',
+    async (category) => {
+      const t = await service.open('notify-' + category, category, 'Notify', 'Help', {});
+      const channel = registry.get(t.channelId!)!;
+      const notification = [...channel.sent.values()].find((m) =>
+        m.content.includes('is ready for staff.'),
+      )!;
+      expect(notification.content).toContain('<@&900000000000000004>');
+      const access = channel.access as { id: string }[];
+      expect(access.some((row) => row.id === t.roleId)).toBe(true);
+      expect(access.some((row) => row.id === '900000000000000005')).toBe(true);
+      if (category === 'management')
+        expect(access.some((row) => row.id === '900000000000000004')).toBe(false);
+      expect(notification.content).toContain('<@' + t.ownerId + '>');
+      expect(notification.id).not.toBe(t.welcomeMessageId);
+      await service.refresh(t.id);
+      await service.notifyOpening(t, channel as unknown as TextChannel);
+      expect(
+        [...channel.sent.values()].filter((m) => m.content.includes('is ready for staff.')),
+      ).toHaveLength(1);
+      // Simulate delivery succeeding before the database acknowledgement was stored.
+      await db.auditEvent.deleteMany({ where: { ticketId: t.id, action: 'opening_notification' } });
+      await service.notifyOpening(t, channel as unknown as TextChannel);
+      expect(
+        [...channel.sent.values()].filter((m) => m.content.includes('is ready for staff.')),
+      ).toHaveLength(1);
+      expect(
+        await db.auditEvent.count({ where: { ticketId: t.id, action: 'opening_notification' } }),
+      ).toBe(1);
+    },
+  );
   it('keeps a ticket and pending operation when transcript upload fails, then resumes', async () => {
     const t = await service.open(
       'owner-failure',

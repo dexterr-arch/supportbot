@@ -175,12 +175,6 @@ export async function settingsModal(db: Database, guildId: string, key: string) 
         { id: 'emoji', label: 'Emoji (optional)', value: c.emoji, max: 60, required: false },
       ],
     );
-    const role = new RoleSelectMenuBuilder()
-      .setCustomId('roleId')
-      .setMinValues(0)
-      .setMaxValues(1)
-      .setRequired(false);
-    if (c.roleId) role.setDefaultRoles(c.roleId);
     const parent = new ChannelSelectMenuBuilder()
       .setCustomId('parentId')
       .addChannelTypes(ChannelType.GuildCategory)
@@ -190,12 +184,12 @@ export async function settingsModal(db: Database, guildId: string, key: string) 
     if (c.parentId) parent.setDefaultChannels(c.parentId);
     return form.addLabelComponents(
       new LabelBuilder()
-        .setLabel('Staff role override (optional)')
-        .setDescription('Leave empty to use the team role from Channels & staff roles.')
-        .setRoleSelectMenuComponent(role),
-      new LabelBuilder()
-        .setLabel('Ticket folder override (optional)')
-        .setDescription('Leave empty to use the Open tickets folder.')
+        .setLabel(
+          c.key === 'management' ? 'Management ticket folder' : 'Basic Support ticket folder',
+        )
+        .setDescription(
+          'Choose a separate Discord category for this ticket type. Empty uses the default folder.',
+        )
         .setChannelSelectMenuComponent(parent),
     );
   }
@@ -262,7 +256,7 @@ export async function saveSetting(
       label: i.fields.getTextInputValue('label'),
       description: i.fields.getTextInputValue('description'),
       emoji: i.fields.getTextInputValue('emoji'),
-      roleId: i.fields.getSelectedRoles('roleId')?.first()?.id ?? '',
+      roleId: '',
       parentId: i.fields.getSelectedChannels('parentId')?.first()?.id ?? '',
       order: false,
     };

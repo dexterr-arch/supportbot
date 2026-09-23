@@ -1,3 +1,9 @@
+# September 23 category access and notification update
+
+Local validation: formatting, ESLint, TypeScript, production build, and all 65 tests passed. Integration tests use a disposable PostgreSQL database and simulated Discord channels. They verify both category access policies, persistent role notifications, and retry deduplication. No live Discord notification delivery test was performed. Docker verification runs in GitHub Actions because Docker is unavailable on this computer.
+
+## Earlier verification records
+
 # Verification report
 
 Verified on 16 September 2026 on Windows, using Node.js 24.21.0 and a workspace-local PostgreSQL 17.6 test server. No real Discord token was created, supplied, or used.
@@ -40,3 +46,28 @@ Before customer use:
 3. Deploy exactly one always-running bot instance, configure durable PostgreSQL and backups, and customize terms, pricing, privacy, roles, channels, and artwork.
 
 The CI workflow contains installation, migration, formatting, lint, TypeScript, tests, build, dependency audit, and Docker build steps. It was supplied but not dispatched to an external account during this task.
+
+## Update verification — 2026-09-17
+
+Support/Management-only interface, guided setup, and stale-channel recovery:
+
+- Formatting, lint, TypeScript, production build: passed locally.
+- 63 tests passed: unit tests plus real disposable PostgreSQL with simulated Discord, including both ticket categories, close/reopen, new tickets after closure, missing-channel recovery, and permission-error safeguards.
+- GitHub verification passed for commit 2477f672b630f151f9f6995115038c0ea40f6929, including the production Docker image build and dependency audit.
+- All 14 uploaded change files matched the locally tested release.
+- The release ZIP excludes secrets and uses placeholders in .env.example.
+- Live Discord lifecycle testing is separate from these simulated tests. See deployment status in the conversation for cloud rollout results.
+
+Live deployment: Railway deployment 130b7330-7dc1-4756-8c66-a595a43960af became Active on September 17, 2026. Startup logs confirm guild command registration, Support bot ready, and removal of the stale active-ticket block after Discord confirmed the channel no longer exists. A complete manual Discord ticket lifecycle was not performed.
+
+## Transcript-first deletion update - 2026-09-18
+
+62 tests passed with disposable PostgreSQL and simulated Discord. Formatting, lint, type checking and production compilation passed. A subsequent configuration-only change passed lint, type checking and all 44 unit tests. Tests verify upload failure preserves a channel, uploaded attachments are checked before deletion, successful closure permits a new request, simplified controls omit branding/escalation/priority, and role-notification permission is scoped to the bot in private tickets. All 16 changed files matched the uploaded branch. This does not constitute a manual Discord lifecycle test.
+
+Final notification adjustment: channel creation uses baseline overwrites; the private-channel notification overwrite is applied before the welcome send. All 62 tests passed again after restarting the disposable local PostgreSQL service. Lint, type checking and production compilation passed. GitHub PR #2 passed both cloud checks including Docker. Final follow-up: PR #3.
+
+Final deployment verified on 2026-09-18: PR #3 passed both GitHub checks including Docker build and was merged. Railway deployment 0c255ab0-b79c-43a7-b84b-faaab7e2d539 is Active; logs confirm guild command registration and Support bot ready after the previous instance released its singleton lock. No manual live Discord close/delete test was performed.
+
+## Persistent Support Team notification fix - 2026-09-18
+
+Both ticket categories now send a separate plain-text mention of the configured Support Team role. Category-specific access is unchanged. Audit and message-history recovery suppress duplicate notifications. Formatting, lint, TypeScript and production build passed; all 64 tests passed with disposable PostgreSQL and simulated Discord. Tests cover persistence across UI edits, retry after a missing audit acknowledgement, and no Support-role access grant in Management tickets. Three uploaded files matched local source. Live Discord push-notification delivery is not inferred from these tests.

@@ -158,7 +158,7 @@ export const settingsSchema = z
 export type Settings = z.infer<typeof settingsSchema>;
 export type Category = z.infer<typeof categorySchema>;
 export function categoryRole(s: Settings, c: Category) {
-  return c.roleId || (c.key === 'management' ? s.managementRoleId : s.supportRoleId);
+  return c.key === 'management' ? s.managementRoleId : s.supportRoleId;
 }
 // Preserve stored IDs and wording while retiring commerce options from older installs.
 export function supportOnlySettings(s: Settings): Settings {

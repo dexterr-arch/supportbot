@@ -48,11 +48,12 @@ export const fields: Record<string, { label: string; description: string; max?: 
   },
   supportRoleId: {
     label: 'Support team role',
-    description: 'Who can see and manage Support tickets. Choose a non-admin staff role.',
+    description: 'Basic Support access only. Both ticket types ping this shared team role.',
   },
   managementRoleId: {
     label: 'Management team role',
-    description: 'Who can see and manage Management tickets. Use a non-admin role.',
+    description:
+      'Can see and manage BOTH Basic Support and Management tickets. Use a distinct role.',
   },
   ticketCategoryId: {
     label: 'Open tickets folder',
