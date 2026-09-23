@@ -48,6 +48,22 @@ describe('ticket authorization', () => {
   });
 });
 describe('channel access', () => {
+  it('gives Management access to both types without granting Support access to Management', () => {
+    const support = overwrites('guild', 'bot', 'owner', 'support', [], false, true, 'management');
+    expect(support.map((o) => o.id)).toContain('management');
+    const management = overwrites(
+      'guild',
+      'bot',
+      'owner',
+      'management',
+      [],
+      false,
+      true,
+      'management',
+    );
+    expect(management.map((o) => o.id)).not.toContain('support');
+    expect(management.filter((o) => o.id === 'management')).toHaveLength(1);
+  });
   it('allows role notification only through the bot private-channel overwrite', () => {
     const creation = overwrites('guild', 'bot', 'owner', 'support', [], false, false);
     expect(new PermissionsBitField(creation[1]!.allow).has(P.MentionEveryone)).toBe(false);

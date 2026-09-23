@@ -21,11 +21,12 @@ describe('guided setup', () => {
     expect(JSON.stringify(channel)).toContain('"type":8');
     expect(channel.title).toBe('Public panel channel');
   });
-  it('edits categories with five labeled fields and no JSON', async () => {
+  it('edits categories with four labeled fields and no JSON', async () => {
     const form = (await settingsModal(db, 'guild', 'category.management')).toJSON();
-    expect(form.components).toHaveLength(5);
+    expect(form.components).toHaveLength(4);
     expect(JSON.stringify(form)).not.toContain('JSON');
-    expect(JSON.stringify(form)).toContain('Staff role override');
+    expect(JSON.stringify(form)).not.toContain('Staff role override');
+    expect(JSON.stringify(form)).toContain('Management ticket folder');
   });
   it('gives every routing option a helpful display name and description', async () => {
     const menu = await fieldsMenu(db, 'guild', 'routing');
