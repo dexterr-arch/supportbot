@@ -1,4 +1,13 @@
-# Support Ticket Bot
+# Basic Support and Management setup
+
+1. Run `/setup settings` and select **Channels & staff roles**. Set **Support team role** to the shared Support Team role, and **Management team role** to the distinct Management role.
+2. Select **Support & Management**, then **Support tickets**. Name it **Basic Support** and choose its Discord category using **Basic Support ticket folder**.
+3. Edit **Management tickets** and select a different Discord category using **Management ticket folder**.
+4. Use **Post / refresh panel**. Both options appear in the public dropdown.
+
+Basic Support tickets allow Support Team and Management. Management tickets allow only Management, the creator, explicitly added participants, and the bot (administrators always retain Discord access). Both categories mention the shared Support Team role in a separate opening message; a mention does not grant channel access. Existing open ticket overwrites are corrected on startup. Category-specific staff overrides are retired to prevent accidental access leaks.
+
+## Full usage guide
 
 **Support-only edition:** this update publishes one Contact panel with Support and Management. It removes the tracked Order Info panel when `/setup panels` runs. See [SUPPORT-ONLY-UPDATE.md](SUPPORT-ONLY-UPDATE.md) for upgrading an existing Railway deployment. Legacy commerce settings remain compatible with existing databases but are hidden from the interface.
 
@@ -113,20 +122,20 @@ Only server administrators can use `/setup settings` and `/setup panels`. There 
 
 Run **/setup settings** to open a private setup dashboard. It lists the destinations you still need to choose. No database editing or JSON is needed.
 
-| Section                     | What it does                                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1. Channels & staff roles   | Choose team roles, the public panel channel, open ticket folder and private transcript log using Discord pickers.      |
-| 2. Support & Management     | Edit either option's name, description and emoji. Optional staff-role and ticket-folder pickers override the defaults. |
-| 3. Name & appearance        | Set the brand name, accent color and ticket-action cooldown.                                                           |
-| 4. Banner & footer images   | Set public HTTPS image URLs, or leave blank to hide images.                                                            |
-| 5. Panel & welcome messages | Write the public instructions, ticket welcome and privacy note.                                                        |
-| 6. Button & form wording    | Advanced customization of displayed labels.                                                                            |
+| Section                     | What it does                                                                                                      |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1. Channels & staff roles   | Choose team roles, the public panel channel, open ticket folder and private transcript log using Discord pickers. |
+| 2. Support & Management     | Edit either option's name, description and emoji. Choose a separate Discord ticket folder for each type.          |
+| 3. Name & appearance        | Set the brand name, accent color and ticket-action cooldown.                                                      |
+| 4. Banner & footer images   | Set public HTTPS image URLs, or leave blank to hide images.                                                       |
+| 5. Panel & welcome messages | Write the public instructions, ticket welcome and privacy note.                                                   |
+| 6. Button & form wording    | Advanced customization of displayed labels.                                                                       |
 
 Start with Channels & staff roles. Choose the Support and Management roles first, then the open-ticket Discord category, the staff-only log, and the public panel text channel. Human staff roles must not have Administrator. The private log must deny access to unrelated roles and members.
 
 Each editor explains its purpose. After saving, use **Setup home** to continue. Click **Post / refresh panel** when ready (or run **/setup panels**). This publishes a single Contact panel with Support and Management and retires the old tracked Order Info message. Repeated use updates the recorded message. Existing configured branding and images are preserved.
 
-Category editors contain five fields: displayed name, description, optional emoji, optional staff-role override and optional ticket-folder override. Leave overrides empty to use the main settings. Category keys are managed internally; both types ask only for a subject and description.
+Category editors contain four fields: displayed name, description, optional emoji and optional ticket folder. Leave the folder empty to use the default folder. Access always follows the Support Team and Management roles in the main settings. Category keys are managed internally; both types ask only for a subject and description.
 
 Images are optional. Use a public HTTPS image URL. Discord controls the displayed size and cropping. A banner around 1200 × 320 and footer around 1200 × 64 are suitable starting points.
 
