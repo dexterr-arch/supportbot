@@ -42,6 +42,7 @@ export function overwrites(
   members: readonly string[],
   locked: boolean,
   notifyRole = true,
+  managementRoleId = '',
 ): OverwriteResolvable[] {
   const people = [...new Set([ownerId, ...members])].filter((id) => id !== botId);
   return [
@@ -51,12 +52,12 @@ export function overwrites(
       type: 1,
       allow: notifyRole ? [...botPermissions, P.MentionEveryone] : botPermissions,
     },
-    {
-      id: roleId,
-      type: 0,
+    ...[...new Set([roleId, managementRoleId].filter(Boolean))].map((id) => ({
+      id,
+      type: 0 as const,
       allow: locked ? [P.ViewChannel, P.ReadMessageHistory] : conversation,
       deny: locked ? writePermissions : [],
-    },
+    })),
     ...people.map((id) => ({
       id,
       type: 1 as const,
@@ -114,6 +115,10 @@ export async function validateLog(guild: Guild, s: Settings): Promise<TextChanne
   return log;
 }
 export async function validateRouting(guild: Guild, s: Settings) {
+  if (s.supportRoleId && s.supportRoleId === s.managementRoleId)
+    throw new UserError(
+      'Choose different Support Team and Management roles so Management tickets stay private.',
+    );
   for (const key of [
     'supportRoleId',
     'managementRoleId',
