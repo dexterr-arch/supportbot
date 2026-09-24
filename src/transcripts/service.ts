@@ -1,11 +1,18 @@
-import { AttachmentBuilder, EmbedBuilder, type Guild, type TextChannel } from 'discord.js';
+import {
+  AttachmentBuilder,
+  EmbedBuilder,
+  ChannelType,
+  type Guild,
+  type TextChannel,
+  type ThreadChannel,
+} from 'discord.js';
 import type { Ticket } from '@prisma/client';
 import type { Database } from '../database/client.js';
 import type { Settings } from '../config/settings.js';
 import { validateLog } from '../discord/permissions.js';
 import { noMentions } from '../discord/ui.js';
 import { renderParts, type TranscriptMessage } from './html.js';
-export async function collect(channel: TextChannel): Promise<TranscriptMessage[]> {
+export async function collect(channel: TextChannel | ThreadChannel): Promise<TranscriptMessage[]> {
   const messages: TranscriptMessage[] = [];
   let before: string | undefined;
   for (;;) {
@@ -44,6 +51,17 @@ export async function archive(
   });
   if (!parts.length) {
     const messages = await collect(channel);
+    const notes = await db.auditEvent.findFirst({
+      where: { ticketId: t.id, action: 'staff_thread' },
+    });
+    if (notes?.detail) {
+      const thread = await guild.channels.fetch(notes.detail);
+      if (thread?.type !== ChannelType.PrivateThread || thread.parentId !== channel.id)
+        throw new Error('Staff notes thread is unavailable; ticket channel preserved.');
+      for (const message of await collect(thread))
+        messages.push({ ...message, author: 'Staff notes · ' + message.author });
+    }
+    messages.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
     messages.unshift({
       id: 'intake',
       author: 'Original ticket intake',
