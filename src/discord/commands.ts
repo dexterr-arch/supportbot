@@ -28,6 +28,9 @@ ticket.addSubcommand((c) =>
     ),
 );
 ticket.addSubcommand((c) =>
+  c.setName('notes').setDescription('Join the private staff notes thread for this ticket'),
+);
+ticket.addSubcommand((c) =>
   c
     .setName('close')
     .setDescription('Save transcript and delete this channel with confirmation')

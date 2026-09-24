@@ -354,6 +354,7 @@ export class Router {
         'remove',
         'rename',
         'transcript',
+        'notes',
       ].includes(action)
     )
       throw new UserError('Unknown ticket action.');
@@ -473,7 +474,17 @@ export class Router {
     }
     if (action === 'claim' || action === 'unclaim') {
       await claim(this.db, t, actor.id, action === 'unclaim');
+      const updated = await this.db.ticket.findUniqueOrThrow({ where: { id: t.id } });
+      await this.service.updateClaimName(updated, updated.claimId ?? undefined);
+      if (updated.claimId) await this.service.joinStaffNotes(updated, updated.claimId);
       await this.service.refresh(t.id);
+    } else if (action === 'notes') {
+      const thread = await this.service.joinStaffNotes(t, actor.id);
+      await privateReply(
+        i,
+        'Private staff notes: <#' + thread.id + '>. Only invited staff can read this thread.',
+      );
+      return;
     } else if (action === 'transcript') {
       const channel = await this.service.getChannel(t);
       const html = renderParts('Ticket #' + t.number, await collect(channel));

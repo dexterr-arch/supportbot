@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   allowed,
   channelName,
+  claimedName,
   canTransition,
   type Action,
   type Actor,
@@ -85,6 +86,12 @@ describe('channel access', () => {
   });
 });
 describe('names and lifecycle', () => {
+  it('keeps the original question in claimed and unclaimed channel names', () => {
+    expect(claimedName(22, 'Partnership Request', 'Frosty')).toBe(
+      'ticket-22-frosty-partnership-request',
+    );
+    expect(claimedName(22, 'Partnership Request')).toBe('ticket-22-partnership-request');
+  });
   it.each([
     ['Hello World!!', 'hello-world'],
     ['../../@everyone', 'everyone'],

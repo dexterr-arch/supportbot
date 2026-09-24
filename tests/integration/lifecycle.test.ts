@@ -16,6 +16,25 @@ class FakeChannel {
   failUploads = false;
   sent = new Collection<string, FakeMessage>();
   access: unknown;
+  archived = false;
+  members = { add: vi.fn(async (_id: string) => undefined) };
+  threads = {
+    fetchActive: vi.fn(async () => ({
+      threads: new Collection(
+        [...registry.entries()].filter(
+          ([, c]) => c.type === ChannelType.PrivateThread && c.parentId === this.id,
+        ),
+      ),
+    })),
+    create: vi.fn(async ({ name }: { name: string }) => {
+      const thread = new FakeChannel();
+      thread.type = ChannelType.PrivateThread as ChannelType.GuildText;
+      thread.parentId = this.id;
+      thread.name = name;
+      registry.set(thread.id, thread);
+      return thread;
+    }),
+  };
   permissionOverwrites = {
     set: vi.fn(async (value: unknown) => {
       this.access = value;
@@ -67,6 +86,10 @@ class FakeChannel {
   }
   async setParent(id: string) {
     this.parentId = id;
+    return this;
+  }
+  async setArchived(archived: boolean) {
+    this.archived = archived;
     return this;
   }
   async setName(name: string) {
@@ -217,6 +240,21 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
     expect(t.operation).toBeNull();
     expect(t.welcomeMessageId).not.toBeNull();
     expect(registry.get(t.channelId!)!.topic).toBe('support-ticket:' + t.id);
+    const event = await db.auditEvent.findFirst({
+      where: { ticketId: t.id, action: 'staff_thread' },
+    });
+    expect(registry.get(event!.detail!)?.type).toBe(ChannelType.PrivateThread);
+    expect(registry.get(event!.detail!)?.parentId).toBe(t.channelId);
+  });
+  it('lets staff join the private notes thread and avoids duplicating it on recovery', async () => {
+    const t = await service.open('notes-owner', 'support', 'Notes', 'Staff only', {});
+    const first = await service.joinStaffNotes(t, 'staff-member');
+    expect((first as unknown as FakeChannel).members.add).toHaveBeenCalledWith('staff-member');
+    await service.reconcileActiveChannels();
+    expect(await db.auditEvent.count({ where: { ticketId: t.id, action: 'staff_thread' } })).toBe(
+      1,
+    );
+    expect(registry.get(t.channelId!)!.threads.create).toHaveBeenCalledTimes(1);
   });
   it.each(['support', 'management'])(
     'sends a separate persistent %s staff notification and never repeats it on refresh or recovery',
@@ -309,6 +347,11 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
   it('deletes only after transcript and audit summary are saved', async () => {
     const t = await service.open('close-delete', 'support', 'Done', 'Transcript test', {});
     const channel = registry.get(t.channelId!)!;
+    const notesEvent = await db.auditEvent.findFirstOrThrow({
+      where: { ticketId: t.id, action: 'staff_thread' },
+    });
+    const notes = registry.get(notesEvent.detail!)!;
+    await notes.send({ content: '<private staff decision>' });
     const deletion = vi.spyOn(channel, 'delete').mockImplementation(async () => {
       const saved = await db.ticket.findUniqueOrThrow({ where: { id: t.id } });
       expect(saved.transcriptGeneration).toBe(t.generation);
@@ -318,6 +361,9 @@ describe('lifecycle orchestration with real PostgreSQL and simulated Discord', (
     });
     await service.request(t, 'close', 'staff');
     expect(deletion).toHaveBeenCalledOnce();
+    const saved = await db.transcript.findMany({ where: { ticketId: t.id } });
+    expect(saved.map((part) => part.html).join('')).toContain('&lt;private staff decision&gt;');
+    expect(saved.map((part) => part.html).join('')).toContain('Staff notes');
     expect((await db.ticket.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('DELETED');
   });
 });

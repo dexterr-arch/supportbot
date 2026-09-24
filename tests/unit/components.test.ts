@@ -105,6 +105,7 @@ describe('Discord component payloads', () => {
       'add',
       'remove',
       'rename',
+      'notes',
       'close',
       'reopen',
       'delete',

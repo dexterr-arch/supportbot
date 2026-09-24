@@ -99,14 +99,18 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
   const actions =
     t.status === 'CLOSED'
       ? ['reopen', 'delete']
-      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename'];
+      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename', 'notes'];
   for (let i = 0; i < actions.length; i += 5) {
     const row = new ActionRowBuilder<ButtonBuilder>();
     for (const action of actions.slice(i, i + 5))
       row.addComponents(
         new ButtonBuilder()
           .setCustomId('v1:t:' + action + ':' + t.id)
-          .setLabel(compact(s.copy[action as keyof Settings['copy']], 32))
+          .setLabel(
+            action === 'notes'
+              ? 'Staff Notes'
+              : compact(s.copy[action as keyof Settings['copy']], 32),
+          )
           .setStyle(
             action === 'close' || action === 'delete' ? ButtonStyle.Danger : ButtonStyle.Secondary,
           )
