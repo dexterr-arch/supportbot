@@ -2,7 +2,7 @@
 
 Use `/addrole user:@member role:@role` to give a member a role with Discord's member and role pickers. You need Manage Roles. Your highest role and the bot's highest role must be above the selected role and member; the server owner bypasses only their own hierarchy check. Managed integration roles and @everyone are rejected. Results are private and do not ping anyone.
 
-Ticket messages show the subject, category, creator, time, status, assigned staff, and description. Controls are Claim, Unclaim, Close, Add Member, Remove Member, and Rename. Closing still requires confirmation and saves the transcript to the staff log before deleting. Staff can generate a manual transcript using `/ticket transcript`. Full details remain available using `/ticket info`.
+Ticket messages show the subject, category, creator, time, status, assigned staff, and description. Controls are Claim, Unclaim, Close, Add Member, Remove Member, Rename, and Staff Notes. Each ticket gets a private staff notes thread. Claiming renames the channel to include the claimant while retaining the original subject. Closing requires confirmation and saves the ticket and staff notes transcript to the private staff log before deleting. Staff can generate a manual ticket-channel transcript using `/ticket transcript`. Full details remain available using `/ticket info`.
 
 Each type uses its configured folder. Existing open tickets are moved to their explicit category folder on startup, preserving private permissions. Configure the folders with `/setup settings` → Support & Management.
 
@@ -53,13 +53,15 @@ The bot uses discord.js 14.27.0, Prisma 7.10.0, TypeScript, Vitest, ESLint, Pret
 | Attach Files                      | Upload HTML transcripts                           |
 | Manage Channels                   | Create, rename, move, and delete ticket channels  |
 | Manage Roles / Manage Permissions | Edit channel permission overwrites                |
+| Create Private Threads            | Create a staff notes thread in each ticket        |
+| Send Messages in Threads          | Post and retrieve private staff notes             |
 
-**Never grant Administrator.** Baseline permission integer: **268553232**. The bot does not need Manage Messages, Manage Webhooks, Kick Members, Ban Members, or Mention Everyone.
+**Never grant Administrator.** Baseline permission integer: **343865936912**. The bot does not need Manage Messages, Manage Webhooks, Kick Members, Ban Members, or Mention Everyone. If the bot was installed before staff notes were added, update its server role permissions to include Create Private Threads and Send Messages in Threads. The private notes thread is available only to its invited members, the bot, and administrators with Discord's thread management access; a support role cannot be invited as a whole.
 
 Use the Portal's installation link, or replace `YOUR_APPLICATION_ID` in:
 
 ```text
-https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot%20applications.commands&permissions=268553232&integration_type=0
+https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot%20applications.commands&permissions=343865936912&integration_type=0
 ```
 
 Open the link in your browser, choose your server, and authorize it. The inviting account needs permission to manage that server. Use Unicode or same-server emoji; cross-server custom emoji may need the optional Use External Emojis permission.
@@ -153,20 +155,23 @@ Members choose Support or Management in the Contact panel and submit the modal. 
 
 A ticket grants channel access to its owner, its category role, the bot, administrators, and explicitly added members. Added members can converse but do not receive staff management powers.
 
-| Command/control                                     | Who can use it                                                  |
-| --------------------------------------------------- | --------------------------------------------------------------- |
-| `/ticket info`                                      | Owner, participants, category staff, management, administrators |
-| Close button / `/ticket close [reason]`             | Owner or authorized staff; requires confirmation                |
-| Claim / Unclaim                                     | Category staff; only claimant or management/admin can unclaim   |
-| Add/Remove Member / `/ticket add`, `/ticket remove` | Authorized staff                                                |
-| Rename / `/ticket rename`                           | Authorized staff                                                |
-| Move                                                | Authorized staff                                                |
-| Reopen / `/ticket reopen`                           | Authorized staff                                                |
-| Delete / `/ticket delete`                           | Management or administrators; requires confirmation             |
-| Transcript / `/ticket transcript`                   | Authorized staff; private on-demand export                      |
-| `/bot status`                                       | Members; pending-operation count shown only to administrators   |
+| Command/control                                     | Who can use it                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `/ticket info`                                      | Owner, participants, category staff, management, administrators                                   |
+| Close button / `/ticket close [reason]`             | Owner or authorized staff; requires confirmation                                                  |
+| Claim / Unclaim                                     | Category staff; only claimant or management/admin can unclaim; channel name updates automatically |
+| Staff Notes / `/ticket notes`                       | Authorized staff; joins the private thread for this ticket                                        |
+| Add/Remove Member / `/ticket add`, `/ticket remove` | Authorized staff                                                                                  |
+| Rename / `/ticket rename`                           | Authorized staff                                                                                  |
+| Move                                                | Authorized staff                                                                                  |
+| Reopen / `/ticket reopen`                           | Authorized staff                                                                                  |
+| Delete / `/ticket delete`                           | Management or administrators; requires confirmation                                               |
+| Transcript / `/ticket transcript`                   | Authorized staff; private on-demand export                                                        |
+| `/bot status`                                       | Members; pending-operation count shown only to administrators                                     |
 
 Use ticket commands **inside that ticket's channel**. Add/Remove buttons ask for a member ID; slash commands offer Discord's member picker. Confirmations expire after two minutes. The default interaction cooldown is three seconds.
+
+Each new ticket has a private staff notes thread. Authorized staff click **Staff Notes** or use `/ticket notes` to join; the claimant is added automatically. Discord private threads cannot grant access to an entire role, so other staff join individually. The ticket owner is never invited. Notes are included in the private transcript when the ticket closes; the on-demand `/ticket transcript` command exports only the ticket channel. The claimed channel name is `ticket-N-claimant-original-subject` (shortened if needed); unclaiming restores `ticket-N-original-subject`.
 
 On closure, the bot freezes conversation, snapshots available messages, saves and uploads transcripts, posts an audit summary, verifies all uploaded attachments, deletes the channel, and finalizes DELETED state. There is no archive category requirement. Failed uploads or verification keep the channel intact for recovery. Deleted tickets cannot be reopened; use the public panel to create a new request. Legacy archived tickets retain their existing reopen/delete controls.
 
