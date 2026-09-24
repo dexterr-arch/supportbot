@@ -16,6 +16,8 @@ export const botPermissions = [
   P.AttachFiles,
   P.ManageChannels,
   P.ManageRoles,
+  P.CreatePrivateThreads,
+  P.SendMessagesInThreads,
 ];
 export const invitePermissions = botPermissions.reduce((a, b) => a | b, 0n).toString();
 export const conversation = [
