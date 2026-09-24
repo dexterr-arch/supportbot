@@ -11,7 +11,13 @@ export type Action =
   | 'priority'
   | 'reopen'
   | 'delete'
-  | 'transcript';
+  | 'transcript'
+  | 'notes';
+
+export function claimedName(number: number, subject: string, claimant?: string) {
+  const prefix = 'ticket-' + number + (claimant ? '-' + channelName(claimant).slice(0, 20) : '');
+  return prefix + '-' + channelName(subject).slice(0, 100 - prefix.length - 1);
+}
 export interface Actor {
   id: string;
   admin: boolean;

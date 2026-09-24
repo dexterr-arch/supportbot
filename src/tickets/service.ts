@@ -1,11 +1,17 @@
-import { ChannelType, PermissionFlagsBits, type Guild, type TextChannel } from 'discord.js';
+import {
+  ChannelType,
+  PermissionFlagsBits,
+  type Guild,
+  type TextChannel,
+  type ThreadChannel,
+} from 'discord.js';
 import { Prisma, type Ticket } from '@prisma/client';
 import type { Database } from '../database/client.js';
 import { getSettings, categoryRole } from '../config/settings.js';
 import { overwrites, textChannel, validateRouting } from '../discord/permissions.js';
 import { ticketPanel } from '../discord/ui.js';
 import { archive, verifyArchive } from '../transcripts/service.js';
-import { channelName } from './policy.js';
+import { channelName, claimedName } from './policy.js';
 import { reserve, begin } from './repository.js';
 import { logger, safeError, UserError } from '../infrastructure/logger.js';
 export class TicketService {
@@ -152,6 +158,59 @@ export class TicketService {
     if (!t.channelId) throw new UserError('Ticket channel is not ready.');
     return textChannel(this.guild, t.channelId);
   }
+  async staffThread(t: Ticket, channel: TextChannel): Promise<ThreadChannel> {
+    const existing = await this.db.auditEvent.findFirst({
+      where: { ticketId: t.id, action: 'staff_thread' },
+    });
+    if (existing?.detail) {
+      const thread = await this.guild.channels.fetch(existing.detail);
+      if (thread?.type !== ChannelType.PrivateThread || thread.parentId !== channel.id)
+        throw new UserError(
+          'Staff notes thread is unavailable. Ask an administrator to restore it.',
+        );
+      return thread;
+    }
+    const name = 'staff-notes-' + t.number;
+    const active = await channel.threads.fetchActive();
+    let thread = active.threads.find((candidate) => candidate.name === name);
+    if (!thread) {
+      thread = await channel.threads.create({
+        name,
+        type: ChannelType.PrivateThread,
+        invitable: false,
+        reason: 'Private staff notes for ticket #' + t.number,
+      });
+      await thread.send({
+        content:
+          'Private staff notes for ticket #' +
+          t.number +
+          '. Authorized staff can join using the Staff Notes button in the ticket.',
+        allowedMentions: { parse: [] },
+      });
+    }
+    await this.db.auditEvent.create({
+      data: {
+        ticketId: t.id,
+        actorId: this.guild.client.user.id,
+        action: 'staff_thread',
+        detail: thread.id,
+      },
+    });
+    return thread;
+  }
+  async joinStaffNotes(t: Ticket, actorId: string) {
+    const channel = await this.getChannel(t);
+    const thread = await this.staffThread(t, channel);
+    if (thread.archived) await thread.setArchived(false);
+    await thread.members.add(actorId);
+    return thread;
+  }
+  async updateClaimName(t: Ticket, claimantId?: string) {
+    const channel = await this.getChannel(t);
+    const claimant = claimantId ? await this.guild.members.fetch(claimantId) : null;
+    const name = claimedName(t.number, t.subject, claimant?.displayName);
+    if (channel.name !== name) await channel.setName(name, 'Ticket claim status changed');
+  }
   async applyAccess(t: Ticket, channel: TextChannel, locked: boolean) {
     const { settings } = await getSettings(this.db, this.guild.id);
     const roleId =
@@ -266,6 +325,7 @@ export class TicketService {
             await this.db.ticket.update({ where: { id }, data: { welcomeMessageId: sent.id } });
           }
         }
+        await this.staffThread(t, channel);
         await this.notifyOpening(t, channel);
         await this.finish(t, actorId, 'OPEN');
         return;
@@ -479,6 +539,8 @@ export class TicketService {
             const { settings } = await getSettings(this.db, this.guild.id);
             const folder = settings.categories.find((c) => c.key === ticket.categoryKey)?.parentId;
             await this.applyAccess(ticket, channel, false);
+            await this.staffThread(ticket, channel);
+            await this.updateClaimName(ticket, ticket.claimId ?? undefined);
             if (folder && channel.parentId !== folder)
               await channel.setParent(folder, { lockPermissions: false });
             if (folder && ticket.parentId !== folder)
