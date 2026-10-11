@@ -22,6 +22,8 @@ describe('ticket authorization', () => {
       'claim',
       'reopen',
       'transcript',
+      'tools',
+      'notes',
     ] as Action[])
       expect(allowed(a, actor('owner'), ticket, 'management')).toBe(false);
   });
@@ -29,6 +31,25 @@ describe('ticket authorization', () => {
     expect(allowed('unclaim', actor('staff', ['support']), ticket, 'management')).toBe(true);
     expect(allowed('unclaim', actor('other', ['support']), ticket, 'management')).toBe(false);
     expect(allowed('unclaim', actor('manager', ['management']), ticket, 'management')).toBe(true);
+  });
+  it('staff tools respect the ticket category and management access', () => {
+    expect(allowed('tools', actor('staff', ['support']), ticket, 'management')).toBe(true);
+    expect(
+      allowed(
+        'tools',
+        actor('staff', ['support']),
+        { ...ticket, roleId: 'management' },
+        'management',
+      ),
+    ).toBe(false);
+    expect(
+      allowed(
+        'tools',
+        actor('manager', ['management']),
+        { ...ticket, roleId: 'management' },
+        'management',
+      ),
+    ).toBe(true);
   });
   it('added members have conversation access, without management powers', () => {
     expect(allowed('view', actor('guest'), ticket, 'management', ['guest'])).toBe(true);

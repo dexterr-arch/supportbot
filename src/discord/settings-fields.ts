@@ -16,7 +16,7 @@ export const sections: Record<string, { label: string; description: string; emoj
   },
   images: {
     label: '4. Banner & footer images',
-    description: 'Set the images at the top and bottom of the public panel.',
+    description: 'Set the images at the top and bottom of the public panel and ticket cards.',
     emoji: '🖼️',
   },
   panels: {

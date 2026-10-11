@@ -18,7 +18,7 @@ import { TicketService } from '../tickets/service.js';
 import { allowed, type Action, type Actor } from '../tickets/policy.js';
 import { claim } from '../tickets/repository.js';
 import { logger, safeError, UserError } from '../infrastructure/logger.js';
-import { confirmation, modal, noMentions } from './ui.js';
+import { confirmation, modal, noMentions, staffTools } from './ui.js';
 import {
   fieldsMenu,
   settingsMenu,
@@ -355,6 +355,7 @@ export class Router {
         'rename',
         'transcript',
         'notes',
+        'tools',
       ].includes(action)
     )
       throw new UserError('Unknown ticket action.');
@@ -398,6 +399,18 @@ export class Router {
         : 'OPEN';
     if (t.status !== expected || !['OPEN', 'CLOSED'].includes(t.status))
       throw new UserError('This action is not available in the current ticket state.');
+    if (action === 'tools') {
+      await i.reply({
+        content:
+          'Staff Tools · Ticket #' +
+          t.number +
+          '\nAdd or remove a ticket member, rename the channel, or join the private staff notes thread.',
+        components: [staffTools(s, t)],
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: noMentions,
+      });
+      return;
+    }
     if (
       ['add', 'remove', 'rename', 'close'].includes(action) &&
       value === undefined &&

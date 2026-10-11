@@ -65,41 +65,47 @@ export function panel(s: Settings, kind: 'contact' = 'contact') {
 }
 export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
   const c = new ContainerBuilder().setAccentColor(parseInt(s.accentColor.slice(1), 16));
+  const category = s.categories.find((v) => v.key === t.categoryKey);
+  if (s.contactBannerUrl) c.addMediaGalleryComponents(media(s.contactBannerUrl));
   c.addTextDisplayComponents(
-    text('# Ticket #' + t.number),
     text(
-      compact(s.copy.welcome || 'Welcome to your ticket.', 250) +
+      '## ' +
+        (category?.emoji ? category.emoji + ' ' : '') +
+        escapeMarkdown(category?.label ?? t.categoryKey) +
+        ' Assistance',
+    ),
+  ).addSeparatorComponents(new SeparatorBuilder());
+  c.addTextDisplayComponents(
+    text(
+      '> Welcome, <@' +
+        t.ownerId +
+        '>.\n> ' +
+        compact(
+          s.copy.welcome ||
+            'Our team will be with you shortly. Please share any extra details here.',
+          500,
+        ).replace(/\n/g, '\n> ') +
         (notifyRole ? '\n<@&' + t.roleId + '>' : ''),
     ),
   );
   c.addSeparatorComponents(new SeparatorBuilder());
   c.addTextDisplayComponents(
     text(
-      '**Subject:** ' +
-        escapeMarkdown(t.subject) +
-        '\n**Category:** ' +
-        escapeMarkdown(t.categoryKey) +
-        '\n**Creator:** <@' +
+      '**Opener:** <@' +
         t.ownerId +
-        '>\n**Opened:** <t:' +
-        Math.floor(t.createdAt.getTime() / 1000) +
-        ':F>\n**Status:** ' +
-        t.status +
-        '\n**Assigned:** ' +
-        (t.claimId ? '<@' + t.claimId + '>' : 'Unclaimed'),
+        '> · `' +
+        t.ownerId +
+        '`\n\n**Subject:** ' +
+        escapeMarkdown(t.subject) +
+        '\n**Reason:** ' +
+        compact(escapeMarkdown(t.description), 1100),
     ),
   );
-  c.addTextDisplayComponents(text(compact(escapeMarkdown(t.description), 1100)));
-  const details = t.details as Record<string, string>;
-  const detailText = Object.entries(details)
-    .map(([k, v]) => '**' + escapeMarkdown(k) + ':** ' + escapeMarkdown(v))
-    .join('\n');
-  if (detailText) c.addTextDisplayComponents(text(compact(detailText, 500)));
   c.addSeparatorComponents(new SeparatorBuilder());
   const actions =
     t.status === 'CLOSED'
       ? ['reopen', 'delete']
-      : ['claim', 'unclaim', 'close', 'add', 'remove', 'rename', 'notes'];
+      : [t.claimId ? 'unclaim' : 'claim', 'close', 'info', 'tools'];
   for (let i = 0; i < actions.length; i += 5) {
     const row = new ActionRowBuilder<ButtonBuilder>();
     for (const action of actions.slice(i, i + 5))
@@ -107,9 +113,11 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
         new ButtonBuilder()
           .setCustomId('v1:t:' + action + ':' + t.id)
           .setLabel(
-            action === 'notes'
-              ? 'Staff Notes'
-              : compact(s.copy[action as keyof Settings['copy']], 32),
+            action === 'info'
+              ? 'Opener Info'
+              : action === 'tools'
+                ? 'Staff Tools'
+                : compact(s.copy[action as keyof Settings['copy']], 32),
           )
           .setStyle(
             action === 'close' || action === 'delete' ? ButtonStyle.Danger : ButtonStyle.Secondary,
@@ -118,11 +126,48 @@ export function ticketPanel(s: Settings, t: Ticket, notifyRole = false) {
       );
     c.addActionRowComponents(row);
   }
+  if (s.footerImageUrl)
+    c.addSeparatorComponents(new SeparatorBuilder()).addMediaGalleryComponents(
+      media(s.footerImageUrl),
+    );
+  c.addTextDisplayComponents(
+    text(
+      '-# Ticket #' +
+        t.number +
+        ' · ' +
+        t.status +
+        ' · Opened <t:' +
+        Math.floor(t.createdAt.getTime() / 1000) +
+        ':R>',
+    ),
+  );
+  const components = [c];
+  if (t.claimId)
+    components.push(
+      new ContainerBuilder()
+        .setAccentColor(parseInt(s.accentColor.slice(1), 16))
+        .addTextDisplayComponents(text('💬 <@' + t.claimId + '> **will be assisting you!**')),
+    );
   return {
     flags: MessageFlags.IsComponentsV2 as const,
-    components: [c],
+    components,
     allowedMentions: noMentions,
   };
+}
+export function staffTools(s: Settings, t: Ticket) {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    ...['add', 'remove', 'rename', 'notes'].map((action) =>
+      new ButtonBuilder()
+        .setCustomId('v1:t:' + action + ':' + t.id)
+        .setLabel(
+          action === 'notes'
+            ? 'Staff Notes'
+            : compact(s.copy[action as keyof Settings['copy']], 32),
+        )
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(t.operation !== null),
+    ),
+  );
 }
 export interface Field {
   id: string;

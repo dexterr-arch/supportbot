@@ -12,7 +12,8 @@ export type Action =
   | 'reopen'
   | 'delete'
   | 'transcript'
-  | 'notes';
+  | 'notes'
+  | 'tools';
 
 export function claimedName(number: number, subject: string, claimant?: string) {
   const prefix = 'ticket-' + number + (claimant ? '-' + channelName(claimant).slice(0, 20) : '');
