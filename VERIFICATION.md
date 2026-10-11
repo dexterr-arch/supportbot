@@ -1,6 +1,6 @@
 # September 23 UI and role-command update
 
-Formatting, lint, TypeScript, production build, and 79 automated tests passed locally. Coverage includes role assignment authorization and hierarchy, simplified ticket payloads, separate folder routing, startup correction of misplaced Management tickets, private staff thread creation and recovery, claim-based naming, and staff notes inclusion in the escaped close transcript. PostgreSQL tests use a disposable database with simulated Discord channels. Live Discord interactions have not been tested.
+Formatting, lint, TypeScript, production build, and 82 automated tests passed locally. Coverage includes role assignment authorization and hierarchy, ticket artwork and category headings, compact primary controls, category-restricted private staff tools, separate claim-status cards, separate folder routing, startup correction of misplaced Management tickets, private staff thread creation and recovery, claim-based naming, and staff notes inclusion in the escaped close transcript. PostgreSQL tests use a disposable database with simulated Discord channels. Live Discord interactions have not been tested.
 
 # September 23 category access and notification update
 
