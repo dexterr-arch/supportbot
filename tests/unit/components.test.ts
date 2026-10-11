@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { MessageFlags } from 'discord.js';
 import type { Ticket } from '@prisma/client';
 import { defaults, settingsSchema } from '../../src/config/settings.js';
-import { panel, ticketPanel, modal } from '../../src/discord/ui.js';
+import { panel, ticketPanel, modal, staffTools } from '../../src/discord/ui.js';
 import { commands } from '../../src/discord/commands.js';
 const s = settingsSchema.parse(defaults);
 function count(value: unknown): number {
@@ -72,8 +72,38 @@ describe('Discord component payloads', () => {
     expect(JSON.stringify(data)).not.toMatch(
       /Orange Support|Priority|Escalate|v1:t:priority|v1:t:escalate|Full intake|Close ticket:|v1:t:move|v1:t:transcript/,
     );
-    for (const action of ['claim', 'unclaim', 'close', 'add', 'remove', 'rename'])
+    for (const action of ['claim', 'close', 'info', 'tools'])
       expect(JSON.stringify(data)).toContain('v1:t:' + action + ':' + t.id);
+    expect(JSON.stringify(data)).not.toContain('v1:t:unclaim:');
+    for (const action of ['add', 'remove', 'rename', 'notes'])
+      expect(JSON.stringify(staffTools(s, t).toJSON())).toContain('v1:t:' + action + ':' + t.id);
+  });
+  it('uses configured artwork and category headings, and keeps claim status in a separate card', () => {
+    const payload = ticketPanel(s, {
+      ...t,
+      categoryKey: 'management',
+      claimId: '123456789012345678',
+    });
+    expect(payload.components).toHaveLength(2);
+    const json = JSON.stringify(payload.components.map((c) => c.toJSON()));
+    expect(json).toContain(s.contactBannerUrl);
+    expect(json).toContain(s.footerImageUrl);
+    expect(json).toContain('Management Assistance');
+    expect(json).toContain('will be assisting you!');
+    expect(json).toContain('v1:t:unclaim:');
+    expect(json).not.toContain('v1:t:claim:');
+    expect(payload.allowedMentions.parse).toEqual([]);
+    expect(count(payload.components.map((c) => c.toJSON()))).toBeLessThanOrEqual(40);
+  });
+  it('ticket cards omit disabled artwork and disable controls during an operation', () => {
+    const json = JSON.stringify(
+      ticketPanel(
+        { ...s, contactBannerUrl: '', footerImageUrl: '' },
+        { ...t, operation: 'close' },
+      ).components.map((c) => c.toJSON()),
+    );
+    expect(json).not.toContain('"type":12');
+    expect(json.match(/"disabled":true/g)).toHaveLength(4);
   });
   it('closed controls allow reopening and confirmed deletion', () => {
     const data = JSON.stringify(
@@ -85,7 +115,7 @@ describe('Discord component payloads', () => {
   });
   it('initial notification stays in the container and later updates suppress the role mention', () => {
     const initial = ticketPanel(s, t, true).components[0]!.toJSON();
-    expect(initial.components.length).toBeLessThanOrEqual(10);
+    expect(count(initial)).toBeLessThanOrEqual(40);
     expect(JSON.stringify(initial).match(/<@&3>/g)).toHaveLength(1);
     expect(JSON.stringify(ticketPanel(s, t).components[0]!.toJSON())).not.toContain('<@&3>');
   });
