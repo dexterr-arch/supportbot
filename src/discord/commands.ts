@@ -54,4 +54,32 @@ const addrole = new SlashCommandBuilder()
     o.setName('user').setDescription('Member receiving the role').setRequired(true),
   )
   .addRoleOption((o) => o.setName('role').setDescription('Role to add').setRequired(true));
-export const commands = [setup, ticket, bot, addrole].map((c) => c.toJSON());
+const selfrole = new SlashCommandBuilder()
+  .setName('selfrole')
+  .setDescription('Give yourself a role approved by server administrators')
+  .setContexts(InteractionContextType.Guild)
+  .addRoleOption((o) =>
+    o.setName('role').setDescription('Whitelisted role to give yourself').setRequired(true),
+  );
+const selfroles = new SlashCommandBuilder()
+  .setName('selfroles')
+  .setDescription('Manage roles that everyone can assign to themselves')
+  .setContexts(InteractionContextType.Guild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+for (const name of ['allow', 'deny'])
+  selfroles.addSubcommand((c) =>
+    c
+      .setName(name)
+      .setDescription(
+        name === 'allow'
+          ? 'Let everyone give themselves this role'
+          : 'Remove a role from the self-assignment whitelist',
+      )
+      .addRoleOption((o) =>
+        o.setName('role').setDescription('Role to configure').setRequired(true),
+      ),
+  );
+selfroles.addSubcommand((c) =>
+  c.setName('list').setDescription('Show the self-assignment role whitelist'),
+);
+export const commands = [setup, ticket, bot, addrole, selfrole, selfroles].map((c) => c.toJSON());

@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import type { Ticket } from '@prisma/client';
 import type { Database } from '../database/client.js';
-import { getSettings, type Settings } from '../config/settings.js';
+import { getSettings, updateSelfRoleWhitelist, type Settings } from '../config/settings.js';
 import { idSchema } from '../config/env.js';
 import { TicketService } from '../tickets/service.js';
 import { allowed, type Action, type Actor } from '../tickets/policy.js';
@@ -30,7 +30,7 @@ import {
 } from './settings-ui.js';
 import { collect } from '../transcripts/service.js';
 import { renderParts } from '../transcripts/html.js';
-import { validateRoleAssignment } from './role-policy.js';
+import { validateRoleAssignment, validateSelfRole } from './role-policy.js';
 export class Router {
   private cooldowns = new Map<string, number>();
   private publishing = false;
@@ -61,6 +61,78 @@ export class Router {
         roles: [...member.roles.cache.keys()],
       };
       if (i.isChatInputCommand()) {
+        if (i.commandName === 'selfrole' || i.commandName === 'selfroles') {
+          const configuring = i.commandName === 'selfroles';
+          if (configuring) this.admin(actor);
+          await i.deferReply({ flags: MessageFlags.Ephemeral });
+          const action = configuring ? i.options.getSubcommand() : 'assign';
+          if (action === 'list') {
+            if (!s.selfRoleIds.length)
+              await privateReply(
+                i,
+                'No roles are approved yet. Use /selfroles allow role to approve one.',
+              );
+            else {
+              const embeds = [];
+              for (let n = 0; n < s.selfRoleIds.length; n += 25)
+                embeds.push({
+                  title: 'Self-assignment whitelist',
+                  description: s.selfRoleIds
+                    .slice(n, n + 25)
+                    .map((id) => '• <@&' + id + '> · `' + id + '`')
+                    .join('\n'),
+                });
+              await i.editReply({ embeds, allowedMentions: noMentions });
+            }
+            return;
+          }
+          const guild = this.service.guild;
+          const role = await guild.roles.fetch(i.options.getRole('role', true).id);
+          if (!role) throw new UserError('That role no longer exists.');
+          if (action !== 'deny') {
+            const me = await guild.members.fetchMe({ force: true });
+            validateSelfRole({
+              whitelisted: action === 'allow' || s.selfRoleIds.includes(role.id),
+              managedRole: role.managed,
+              everyoneRole: role.id === guild.id,
+              botCanManageRoles: me.permissions.has(PermissionFlagsBits.ManageRoles),
+              botAboveRole: me.roles.highest.comparePositionTo(role) > 0,
+            });
+            if (
+              action === 'allow' &&
+              member.id !== guild.ownerId &&
+              member.roles.highest.comparePositionTo(role) <= 0
+            )
+              throw new UserError('Your highest role must be above the role you approve.');
+          }
+          if (configuring) {
+            await updateSelfRoleWhitelist(this.db, guild.id, role.id, action === 'allow');
+            logger.info(
+              { actorId: member.id, roleId: role.id, action },
+              'Self-role whitelist updated.',
+            );
+            await privateReply(
+              i,
+              action === 'allow'
+                ? '<@&' + role.id + '> is now available to EVERYONE through /selfrole.'
+                : '<@&' +
+                    role.id +
+                    '> is no longer available through /selfrole. Existing assignments are kept.',
+            );
+          } else {
+            if (member.roles.cache.has(role.id)) {
+              await privateReply(i, 'You already have <@&' + role.id + '>.');
+              return;
+            }
+            await member.roles.add(role, '/selfrole requested by ' + member.id);
+            logger.info(
+              { actorId: member.id, roleId: role.id },
+              'Member self-assigned approved role.',
+            );
+            await privateReply(i, 'Added <@&' + role.id + '> to you.');
+          }
+          return;
+        }
         if (i.commandName === 'addrole') {
           await i.deferReply({ flags: MessageFlags.Ephemeral });
           const guild = this.service.guild;
