@@ -2,6 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { defaults, settingsSchema, supportOnlySettings } from '../../src/config/settings.js';
 import { envSchema } from '../../src/config/env.js';
 describe('configuration validation', () => {
+  it('starts old server settings with an empty self-role whitelist', () => {
+    const old: Partial<typeof defaults> = { ...defaults };
+    delete old.selfRoleIds;
+    expect(settingsSchema.parse(old).selfRoleIds).toEqual([]);
+  });
+  it.each([['not-an-id'], ['1543932015391281232', '1543932015391281232']])(
+    'rejects invalid self-role whitelist %j',
+    (...selfRoleIds) => {
+      expect(settingsSchema.safeParse({ ...defaults, selfRoleIds }).success).toBe(false);
+    },
+  );
   it('upgrades old settings to support and management while preserving routing and branding', () => {
     const original = settingsSchema.parse(defaults);
     original.panelChannelId = '1549726256826945656';
