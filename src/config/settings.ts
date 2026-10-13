@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { idSchema } from './env.js';
 import type { Database } from '../database/client.js';
+import { UserError } from '../infrastructure/logger.js';
 export const optionalId = z.union([z.literal(''), idSchema]);
 const image = z.union([
   z.literal(''),
@@ -59,6 +60,7 @@ export const defaults = {
   accentColor: '#FF6B24',
   supportRoleId: '',
   managementRoleId: '',
+  selfRoleIds: [] as string[],
   ticketCategoryId: '',
   archiveCategoryId: '',
   transcriptLogChannelId: '',
@@ -132,6 +134,11 @@ export const settingsSchema = z
     accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     supportRoleId: optionalId,
     managementRoleId: optionalId,
+    selfRoleIds: z
+      .array(idSchema)
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length, 'Role IDs must be unique.')
+      .default([]),
     ticketCategoryId: optionalId,
     archiveCategoryId: optionalId,
     transcriptLogChannelId: optionalId,
@@ -176,4 +183,23 @@ export async function getSettings(db: Database, guildId: string) {
     update: {},
   });
   return { settings: supportOnlySettings(settingsSchema.parse(row.data)), revision: row.revision };
+}
+export async function updateSelfRoleWhitelist(
+  db: Database,
+  guildId: string,
+  roleId: string,
+  allow: boolean,
+) {
+  idSchema.parse(roleId);
+  const { settings, revision } = await getSettings(db, guildId);
+  const ids = new Set(settings.selfRoleIds);
+  if (allow) ids.add(roleId);
+  else ids.delete(roleId);
+  const data = settingsSchema.parse({ ...settings, selfRoleIds: [...ids] });
+  const saved = await db.guildSettings.updateMany({
+    where: { guildId, revision },
+    data: { data, revision: { increment: 1 } },
+  });
+  if (!saved.count) throw new UserError('Settings changed while saving. Please try again.');
+  return data;
 }

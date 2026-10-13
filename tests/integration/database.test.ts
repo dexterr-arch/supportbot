@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { database, type Database } from '../../src/database/client.js';
 import { reserve, claim, begin } from '../../src/tickets/repository.js';
-import { defaults } from '../../src/config/settings.js';
+import { defaults, getSettings, updateSelfRoleWhitelist } from '../../src/config/settings.js';
 let db: Database;
 const guildId = '900000000000000001';
 const create = (ownerId: string) =>
@@ -97,5 +97,16 @@ describe('real PostgreSQL invariants', () => {
       ),
     );
     expect(results.reduce((n, r) => n + r.count, 0)).toBe(1);
+  });
+  it('persists self-role approvals without duplicating roles or changing other settings', async () => {
+    const roleId = '1543932015391281232';
+    await updateSelfRoleWhitelist(db, guildId, roleId, true);
+    await updateSelfRoleWhitelist(db, guildId, roleId, true);
+    expect((await getSettings(db, guildId)).settings.selfRoleIds).toEqual([roleId]);
+    await updateSelfRoleWhitelist(db, guildId, roleId, false);
+    const saved = (await getSettings(db, guildId)).settings;
+    expect(saved.selfRoleIds).toEqual([]);
+    expect(saved.brandName).toBe(defaults.brandName);
+    expect(saved.categories).toEqual(defaults.categories);
   });
 });

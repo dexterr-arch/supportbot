@@ -1,3 +1,7 @@
+# October 13 self-assignment roles
+
+Formatting, lint, TypeScript, production build, and all 93 tests passed locally. Added whitelist-only self-assignment, administrator-only whitelist management, explicitly approved staff role support, role hierarchy/managed-role checks, backwards-compatible settings, and PostgreSQL whitelist persistence tests. No live Discord self-assignment test has been performed yet.
+
 # October 11 ticket card redesign
 
 Patched the transitive `source-map-js` dependency to 1.2.2 after GitHub's audit detected GHSA-68fv-2mgg-jv7q. Local `npm audit` now reports zero vulnerabilities.

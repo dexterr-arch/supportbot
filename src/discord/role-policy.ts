@@ -23,3 +23,21 @@ export function validateRoleAssignment(p: RoleAssignmentPolicy) {
       'Give the bot Manage Roles and move its role above the selected role and member.',
     );
 }
+export function validateSelfRole(p: {
+  whitelisted: boolean;
+  managedRole: boolean;
+  everyoneRole: boolean;
+  botCanManageRoles: boolean;
+  botAboveRole: boolean;
+}) {
+  if (!p.whitelisted)
+    throw new UserError(
+      'This role is not approved for self-assignment. Ask an administrator to use /selfroles allow.',
+    );
+  if (p.managedRole || p.everyoneRole)
+    throw new UserError(
+      'The @everyone role and integration-managed roles cannot be self-assigned.',
+    );
+  if (!p.botCanManageRoles || !p.botAboveRole)
+    throw new UserError('Give the bot Manage Roles and move its role above the selected role.');
+}
